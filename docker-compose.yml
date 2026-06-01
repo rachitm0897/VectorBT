@@ -1,0 +1,10 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-vectorbt-sandbox-dev-key}
+    volumes:
+      - ./backend:/app
