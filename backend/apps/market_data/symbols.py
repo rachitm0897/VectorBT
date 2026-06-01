@@ -16,6 +16,7 @@ NAME_TO_TICKER = {
     "facebook": "META",
     "google": "GOOGL",
     "alphabet": "GOOGL",
+    "netflix": "NFLX",
 }
 
 

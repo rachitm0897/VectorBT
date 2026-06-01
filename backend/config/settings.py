@@ -24,10 +24,12 @@ INSTALLED_APPS = [
     "apps.market_data",
     "apps.strategies",
     "apps.backtesting",
+    "apps.agent",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "config.cors.SimpleCorsMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
 
@@ -59,4 +61,12 @@ REST_FRAMEWORK = {
 }
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY") or ""
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or ""
+OPENAI_MODEL = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
 MARKET_DATA_CACHE_DIR = BASE_DIR / "cache" / "market_data"
+PARSED_REQUEST_CACHE_DIR = BASE_DIR / "cache" / "parsed_requests"
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if origin.strip()
+]

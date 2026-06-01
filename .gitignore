@@ -5,4 +5,11 @@ __pycache__/
 backend/db.sqlite3
 backend/cache/market_data/*.json
 !backend/cache/market_data/.gitkeep
-vectorBT/
+backend/cache/parsed_requests/*.json
+!backend/cache/parsed_requests/.gitkeep
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
