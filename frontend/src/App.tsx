@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
-import { runBacktest, runChat, type BacktestResult, type StrategyName } from "./api/client";
+import { runBacktest, runChat, type BacktestRequest, type BacktestResult, type StrategyName } from "./api/client";
 import BacktestForm, { buildBacktestPayload } from "./components/BacktestForm";
 import ChatPanel from "./components/ChatPanel";
+import AppShell from "./components/layout/AppShell";
+import Sidebar from "./components/layout/Sidebar";
+import ParsedRequestPanel from "./components/panels/ParsedRequestPanel";
+import TokenUsagePanel from "./components/panels/TokenUsagePanel";
 import ResultDashboard from "./components/ResultDashboard";
 
 const defaultParameters: Record<StrategyName, string> = {
@@ -22,6 +26,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
+  const [parsedRequest, setParsedRequest] = useState<BacktestRequest | Record<string, unknown> | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
+  const [usedChat, setUsedChat] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const parseError = useMemo(() => {
@@ -60,6 +67,9 @@ export default function App() {
       );
       const response = await runBacktest(payload);
       setResult(response);
+      setParsedRequest(payload);
+      setDiagnostics(response.diagnostics || null);
+      setUsedChat(false);
       setAssistantMessage(null);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Backtest failed.");
@@ -76,6 +86,9 @@ export default function App() {
     try {
       const response = await runChat(message);
       setAssistantMessage(response.assistant_message || null);
+      setParsedRequest(response.parsed_request || null);
+      setDiagnostics(response.diagnostics || response.backtest_result?.diagnostics || null);
+      setUsedChat(true);
 
       if (response.status === "needs_input") {
         const message = response.assistant_message || "More input is required.";
@@ -97,19 +110,15 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-4 text-text lg:px-6">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal text-text">VectorBT Strategy Lab</h1>
-          <p className="mt-1 text-sm text-muted">Deterministic Finnhub daily-candle backtesting sandbox</p>
-        </div>
-        <div className="border border-line bg-panel px-3 py-2 text-xs uppercase tracking-[0.14em] text-muted">
-          Backend: localhost:8000
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
-        <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+    <AppShell
+      sidebar={
+        <Sidebar>
+          <ChatPanel
+            isLoading={isLoading}
+            assistantMessage={assistantMessage}
+            error={chatError}
+            onSend={handleChatSubmit}
+          />
           <BacktestForm
             symbol={symbol}
             strategy={strategy}
@@ -129,18 +138,19 @@ export default function App() {
             onFeesChange={setFees}
             onSubmit={handleSubmit}
           />
-          <ChatPanel
-            isLoading={isLoading}
-            assistantMessage={assistantMessage}
-            error={chatError}
-            onSend={handleChatSubmit}
-          />
-        </aside>
-
-        <section>
-          <ResultDashboard result={result} isLoading={isLoading} error={error} />
-        </section>
-      </div>
-    </main>
+          <ParsedRequestPanel parsedRequest={parsedRequest} result={result} />
+          <TokenUsagePanel diagnostics={diagnostics || result?.diagnostics} usedChat={usedChat} />
+        </Sidebar>
+      }
+    >
+      <ResultDashboard
+        result={result}
+        isLoading={isLoading}
+        error={error}
+        parsedRequest={parsedRequest}
+        diagnostics={diagnostics}
+        usedChat={usedChat}
+      />
+    </AppShell>
   );
 }

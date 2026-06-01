@@ -1,3 +1,6 @@
+@import "ag-grid-community/styles/ag-grid.css";
+@import "ag-grid-community/styles/ag-theme-quartz.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -44,4 +47,16 @@ textarea {
   .form-control {
     @apply w-full border border-line bg-ink px-3 py-2 text-sm text-text outline-none transition focus:border-cyan;
   }
+}
+
+.ag-theme-quartz-dark {
+  --ag-background-color: #0b1119;
+  --ag-foreground-color: #e6edf7;
+  --ag-header-background-color: #101823;
+  --ag-header-foreground-color: #8b99ad;
+  --ag-border-color: #243244;
+  --ag-row-hover-color: #131d2a;
+  --ag-odd-row-background-color: #080d14;
+  --ag-font-size: 12px;
+  --ag-font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }

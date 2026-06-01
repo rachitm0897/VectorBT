@@ -1,87 +1,112 @@
-import type { BacktestResult } from "../api/client";
-import DrawdownChart from "./DrawdownChart";
-import EquityCurveChart from "./EquityCurveChart";
-import MetricsCards from "./MetricsCards";
-import MonteCarloChart from "./MonteCarloChart";
-import PriceChart from "./PriceChart";
-import TradesTable from "./TradesTable";
+import { useState } from "react";
+import type { BacktestRequest, BacktestResult } from "../api/client";
+import DrawdownUnderwaterChart from "./charts/DrawdownUnderwaterChart";
+import EquityBenchmarkChart from "./charts/EquityBenchmarkChart";
+import MonteCarloFanChart from "./charts/MonteCarloFanChart";
+import MonteCarloHistogram from "./charts/MonteCarloHistogram";
+import MonthlyReturnsHeatmap from "./charts/MonthlyReturnsHeatmap";
+import ParameterHeatmap from "./charts/ParameterHeatmap";
+import PremiumPriceChart from "./charts/PremiumPriceChart";
+import RollingMetricsChart from "./charts/RollingMetricsChart";
+import TradeDistributionChart from "./charts/TradeDistributionChart";
+import DashboardTabs, { type DashboardTab } from "./layout/DashboardTabs";
+import EmptyState from "./layout/EmptyState";
+import ErrorState from "./layout/ErrorState";
+import LoadingState from "./layout/LoadingState";
+import DiagnosticsPanel from "./panels/DiagnosticsPanel";
+import MetricsStrip from "./panels/MetricsStrip";
+import ParsedRequestPanel from "./panels/ParsedRequestPanel";
+import StrategySummaryPanel from "./panels/StrategySummaryPanel";
+import TokenUsagePanel from "./panels/TokenUsagePanel";
+import TradesGrid from "./tables/TradesGrid";
 
 type ResultDashboardProps = {
   result: BacktestResult | null;
   isLoading: boolean;
   error: string | null;
+  parsedRequest?: BacktestRequest | Record<string, unknown> | null;
+  diagnostics?: Record<string, unknown> | null;
+  usedChat?: boolean;
 };
 
-export default function ResultDashboard({ result, isLoading, error }: ResultDashboardProps) {
-  if (isLoading) {
-    return (
-      <div className="panel-shell flex min-h-[520px] items-center justify-center p-6">
-        <div className="w-full max-w-lg">
-          <div className="mb-4 h-2 overflow-hidden bg-line">
-            <div className="h-full w-1/2 animate-pulse bg-cyan" />
-          </div>
-          <h2 className="mb-2 text-lg font-semibold text-text">Running deterministic backtest</h2>
-          <p className="text-sm text-muted">Fetching cached or fresh Finnhub candles, generating signals, and building charts.</p>
-        </div>
-      </div>
-    );
-  }
+export default function ResultDashboard({
+  result,
+  isLoading,
+  error,
+  parsedRequest,
+  diagnostics,
+  usedChat,
+}: ResultDashboardProps) {
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
 
-  if (error) {
-    return (
-      <div className="panel-shell border-red/60 bg-red/10 p-5">
-        <h2 className="mb-2 text-lg font-semibold text-red">Backtest failed</h2>
-        <p className="text-sm leading-6 text-text">{error}</p>
-      </div>
-    );
-  }
-
+  if (isLoading) return <LoadingState label="Running deterministic analytics pipeline" />;
+  if (error && !result) return <ErrorState message={error} />;
   if (!result) {
     return (
-      <div className="panel-shell flex min-h-[520px] items-center justify-center p-6">
-        <div className="max-w-xl text-center">
-          <h2 className="mb-3 text-xl font-semibold text-text">Run a strategy backtest</h2>
-          <p className="text-sm leading-6 text-muted">
-            Choose a symbol, select a strategy, adjust parameters, then run the backtest to populate metrics, charts,
-            Monte Carlo paths, and trades.
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        title="No backtest loaded"
+        message="Run a manual strategy or submit a natural-language chat request to populate the terminal."
+      />
     );
   }
-
-  const charts = result.charts || {};
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 border border-line bg-panel px-4 py-3">
-        <div>
-          <div className="section-title">Backtest Complete</div>
-          <div className="mt-1 text-sm text-muted">
-            {result.request?.symbol || "Symbol"} / {result.request?.strategy || "Strategy"}
-          </div>
-        </div>
-        <div className="text-sm text-green">{result.message || "Success"}</div>
-      </div>
+      {error ? <ErrorState message={error} /> : null}
+      <MetricsStrip result={result} />
+      <PremiumPriceChart result={result} />
+      <DashboardTabs activeTab={activeTab} onChange={setActiveTab} />
 
-      {result.warnings?.length ? (
-        <div className="border border-amber/50 bg-amber/10 px-4 py-3 text-sm text-amber">
-          {result.warnings.join(", ")}
+      {activeTab === "overview" ? (
+        <div className="space-y-4">
+          <StrategySummaryPanel result={result} />
+          <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+            <EquityBenchmarkChart result={result} />
+            <DrawdownUnderwaterChart result={result} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+            <MonthlyReturnsHeatmap result={result} />
+            <RollingMetricsChart result={result} />
+          </div>
         </div>
       ) : null}
 
-      <MetricsCards metrics={result.metrics} />
+      {activeTab === "backtest" ? (
+        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+          <EquityBenchmarkChart result={result} />
+          <DrawdownUnderwaterChart result={result} />
+          <TradeDistributionChart result={result} />
+          <RollingMetricsChart result={result} />
+        </div>
+      ) : null}
 
-      <PriceChart price={charts.price} signals={charts.signals} />
+      {activeTab === "monteCarlo" ? (
+        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+          <MonteCarloFanChart result={result} />
+          <MonteCarloHistogram result={result} />
+        </div>
+      ) : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <EquityCurveChart data={charts.equity_curve} />
-        <DrawdownChart data={charts.drawdown_curve} />
-      </div>
+      {activeTab === "parameters" ? (
+        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <ParameterHeatmap result={result} />
+          <ParsedRequestPanel parsedRequest={parsedRequest} result={result} />
+        </div>
+      ) : null}
 
-      <MonteCarloChart data={charts.monte_carlo} summary={result.summary} />
+      {activeTab === "trades" ? (
+        <div className="space-y-4">
+          <TradesGrid result={result} />
+          <TradeDistributionChart result={result} />
+        </div>
+      ) : null}
 
-      <TradesTable trades={result.tables?.trades} />
+      {activeTab === "diagnostics" ? (
+        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <DiagnosticsPanel result={result} diagnostics={diagnostics || result.diagnostics} error={error} />
+          <TokenUsagePanel diagnostics={diagnostics || result.diagnostics} usedChat={usedChat} />
+        </div>
+      ) : null}
     </div>
   );
 }

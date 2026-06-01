@@ -18,6 +18,8 @@ export type BacktestRequest = {
 
 export type MetricSet = {
   total_return_pct?: number;
+  buy_hold_return_pct?: number;
+  alpha_vs_buy_hold_pct?: number;
   sharpe_ratio?: number;
   max_drawdown_pct?: number;
   win_rate_pct?: number;
@@ -26,6 +28,7 @@ export type MetricSet = {
 };
 
 export type PricePoint = {
+  time?: string;
   date: string;
   open?: number;
   high?: number;
@@ -35,14 +38,19 @@ export type PricePoint = {
 };
 
 export type SignalPoint = {
+  time?: string;
   date: string;
   type: "entry" | "exit" | string;
   price?: number;
 };
 
 export type EquityPoint = {
+  time?: string;
   date: string;
   value?: number;
+  strategy?: number;
+  buy_hold?: number;
+  spy?: number;
   drawdown_pct?: number;
 };
 
@@ -72,14 +80,19 @@ export type BacktestResult = {
   charts?: {
     price?: PricePoint[];
     signals?: SignalPoint[];
+    indicators?: Record<string, Array<Record<string, unknown>>>;
     equity_curve?: EquityPoint[];
     drawdown_curve?: EquityPoint[];
     monte_carlo?: MonteCarloChart;
+    monthly_returns?: Array<Record<string, unknown>>;
+    rolling_metrics?: Array<Record<string, unknown>>;
+    parameter_sweep?: Array<Record<string, unknown>>;
   };
   tables?: {
     trades?: Array<Record<string, unknown>>;
   };
   summary?: Record<string, number>;
+  diagnostics?: Record<string, unknown>;
   warnings?: string[];
   errors?: string[];
 };
@@ -89,6 +102,7 @@ export type ChatResponse = {
   assistant_message?: string;
   parsed_request?: BacktestRequest | Record<string, unknown>;
   backtest_result?: BacktestResult;
+  diagnostics?: Record<string, unknown>;
   warnings?: string[];
   errors?: string[];
   missing_fields?: string[];
