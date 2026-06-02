@@ -9,6 +9,13 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-vectorbt-sandbox-dev-key}
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      ANALYTICS_DB_NAME: ${ANALYTICS_DB_NAME:-analytics}
+      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-analytics_user}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD:-analytics_password}
+      ANALYTICS_DB_HOST: ${ANALYTICS_DB_HOST:-analytics_db}
+      ANALYTICS_DB_PORT: ${ANALYTICS_DB_PORT:-5432}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-true}
+      METABASE_URL: ${METABASE_URL:-http://localhost:3000}
     volumes:
       - ./backend:/app
   frontend:
@@ -27,3 +34,56 @@ services:
       - ./frontend/vite.config.ts:/app/vite.config.ts
     depends_on:
       - backend
+  analytics_db:
+    image: postgres:16-alpine
+    container_name: vectortb_analytics_db
+    environment:
+      POSTGRES_DB: ${ANALYTICS_DB_NAME:-analytics}
+      POSTGRES_USER: ${ANALYTICS_DB_USER:-analytics_user}
+      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASSWORD:-analytics_password}
+    expose:
+      - "5432"
+    ports:
+      - "5433:5432"
+    volumes:
+      - analytics_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  metabase_db:
+    image: postgres:16-alpine
+    container_name: vectortb_metabase_db
+    environment:
+      POSTGRES_DB: metabase
+      POSTGRES_USER: metabase_user
+      POSTGRES_PASSWORD: metabase_password
+    volumes:
+      - metabase_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  metabase:
+    image: metabase/metabase:latest
+    container_name: vectortb_metabase
+    ports:
+      - "3000:3000"
+    depends_on:
+      metabase_db:
+        condition: service_healthy
+      analytics_db:
+        condition: service_healthy
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase_user
+      MB_DB_PASS: metabase_password
+      MB_DB_HOST: metabase_db
+
+volumes:
+  analytics_db_data:
+  metabase_db_data:

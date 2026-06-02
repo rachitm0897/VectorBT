@@ -108,6 +108,12 @@ export type ChatResponse = {
   missing_fields?: string[];
 };
 
+export type AnalyticsStatus = {
+  enabled: boolean;
+  connected: boolean;
+  metabase_url: string;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 export async function runBacktest(payload: BacktestRequest): Promise<BacktestResult> {
@@ -164,4 +170,18 @@ export async function runChat(message: string): Promise<ChatResponse> {
   }
 
   return data;
+}
+
+export async function fetchAnalyticsStatus(): Promise<AnalyticsStatus> {
+  const response = await fetch(`${API_BASE_URL}/api/analytics/status/`);
+  if (!response.ok) {
+    throw new Error("Analytics status request failed.");
+  }
+
+  const data = (await response.json()) as Partial<AnalyticsStatus>;
+  return {
+    enabled: Boolean(data.enabled),
+    connected: Boolean(data.connected),
+    metabase_url: data.metabase_url || "http://localhost:3000",
+  };
 }

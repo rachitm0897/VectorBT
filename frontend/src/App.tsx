@@ -1,9 +1,18 @@
-import { useMemo, useState } from "react";
-import { runBacktest, runChat, type BacktestRequest, type BacktestResult, type StrategyName } from "./api/client";
+import { useEffect, useMemo, useState } from "react";
+import {
+  fetchAnalyticsStatus,
+  runBacktest,
+  runChat,
+  type AnalyticsStatus,
+  type BacktestRequest,
+  type BacktestResult,
+  type StrategyName,
+} from "./api/client";
 import BacktestForm, { buildBacktestPayload } from "./components/BacktestForm";
 import ChatPanel from "./components/ChatPanel";
 import AppShell from "./components/layout/AppShell";
 import Sidebar from "./components/layout/Sidebar";
+import AnalyticsStatusPanel from "./components/panels/AnalyticsStatusPanel";
 import ParsedRequestPanel from "./components/panels/ParsedRequestPanel";
 import TokenUsagePanel from "./components/panels/TokenUsagePanel";
 import ResultDashboard from "./components/ResultDashboard";
@@ -30,6 +39,34 @@ export default function App() {
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
   const [usedChat, setUsedChat] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [analyticsStatus, setAnalyticsStatus] = useState<AnalyticsStatus | null>(null);
+  const [analyticsStatusError, setAnalyticsStatusError] = useState<string | null>(null);
+  const [isAnalyticsStatusLoading, setIsAnalyticsStatusLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchAnalyticsStatus()
+      .then((status) => {
+        if (!isMounted) return;
+        setAnalyticsStatus(status);
+        setAnalyticsStatusError(null);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setAnalyticsStatus(null);
+        setAnalyticsStatusError(error instanceof Error ? error.message : "Analytics status unavailable.");
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsAnalyticsStatusLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const parseError = useMemo(() => {
     try {
@@ -140,6 +177,11 @@ export default function App() {
           />
           <ParsedRequestPanel parsedRequest={parsedRequest} result={result} />
           <TokenUsagePanel diagnostics={diagnostics || result?.diagnostics} usedChat={usedChat} />
+          <AnalyticsStatusPanel
+            status={analyticsStatus}
+            isLoading={isAnalyticsStatusLoading}
+            error={analyticsStatusError}
+          />
         </Sidebar>
       }
     >

@@ -206,7 +206,7 @@ def _graph():
 
 
 def _call_parser_llm(message: str) -> dict[str, Any]:
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = OpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_API_BASE_URL)
     response = client.chat.completions.create(
         model=settings.OPENAI_MODEL,
         temperature=0,

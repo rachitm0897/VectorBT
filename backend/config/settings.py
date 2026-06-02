@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "apps.strategies",
     "apps.backtesting",
     "apps.agent",
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [
@@ -70,3 +71,5 @@ CORS_ALLOWED_ORIGINS = [
     for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
     if origin.strip()
 ]
+OPENAI_API_BASE_URL = os.getenv("OPENAI_API_BASE_URL") or "https://api.openai.com/v1"
+METABASE_URL = os.getenv("METABASE_URL") or "http://localhost:3000"

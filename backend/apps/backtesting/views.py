@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.analytics.services import persist_backtest_analytics_async
 from apps.backtesting.engine import BacktestExecutionError, run_backtest
 from apps.backtesting.serializers import BacktestRequestSerializer
 from apps.market_data.finnhub import MarketDataError
@@ -39,6 +40,10 @@ class BacktestAPIView(APIView):
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        persist_backtest_analytics_async(
+            {**result, "_analytics_request": dict(serializer.validated_data)},
+            source="backtest_api",
+        )
         return Response(result, status=status.HTTP_200_OK)
 
 
