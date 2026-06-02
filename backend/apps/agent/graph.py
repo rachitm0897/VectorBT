@@ -8,11 +8,11 @@ from langgraph.graph import END, StateGraph
 from openai import OpenAI, OpenAIError
 
 from apps.agent.cache import load_parsed_request, save_parsed_request
-from apps.backtesting.engine import BacktestExecutionError, run_backtest
+from apps.agent.mcp_client.errors import MCPClientError, MCPServerUnavailableError, MCPToolError
+from apps.agent.mcp_client.service import run_research_via_mcp
 from apps.backtesting.serializers import BacktestRequestSerializer
-from apps.market_data.finnhub import MarketDataError
 from apps.market_data.symbols import normalize_symbol
-from apps.strategies.registry import SUPPORTED_STRATEGIES, StrategyValidationError
+from apps.strategies.registry import SUPPORTED_STRATEGIES
 
 
 DEFAULTS = {
@@ -66,6 +66,7 @@ class AgentState(TypedDict, total=False):
     warnings: list[str]
     errors: list[str]
     missing_fields: list[str]
+    details: str
 
 
 def run_chat_workflow(message: str) -> dict[str, Any]:
@@ -78,6 +79,7 @@ def run_chat_workflow(message: str) -> dict[str, Any]:
         "warnings": state.get("warnings", []),
         "errors": state.get("errors", []),
         "missing_fields": state.get("missing_fields", []),
+        "details": state.get("details", ""),
     }
 
 
@@ -154,24 +156,42 @@ def validate_request_node(state: AgentState) -> AgentState:
     return {**state, "validated_request": serializer.validated_data, "warnings": warnings}
 
 
-def run_backtest_node(state: AgentState) -> AgentState:
+def run_mcp_research_node(state: AgentState) -> AgentState:
     if state.get("status") in {"error", "needs_input"}:
         return state
 
     try:
-        result = run_backtest(state["validated_request"])
-    except MarketDataError as exc:
-        return {**state, "status": "error", "errors": [exc.code], "assistant_message": str(exc)}
-    except StrategyValidationError as exc:
-        return {**state, "status": "error", "errors": [exc.code], "assistant_message": str(exc)}
-    except BacktestExecutionError as exc:
-        return {**state, "status": "error", "errors": [exc.code], "assistant_message": str(exc)}
+        result = run_research_via_mcp(state["validated_request"])
+    except MCPServerUnavailableError as exc:
+        return {
+            **state,
+            "status": "error",
+            "errors": [exc.code],
+            "assistant_message": "The MCP strategy server is unavailable.",
+            "details": exc.safe_message,
+        }
+    except MCPToolError as exc:
+        return {
+            **state,
+            "status": "error",
+            "errors": [exc.code],
+            "assistant_message": "The strategy research tool failed.",
+            "details": exc.safe_message,
+        }
+    except MCPClientError as exc:
+        return {
+            **state,
+            "status": "error",
+            "errors": [exc.code],
+            "assistant_message": "The MCP strategy server is unavailable.",
+            "details": exc.safe_message,
+        }
     except Exception:
         return {
             **state,
             "status": "error",
-            "errors": ["backtest_failed"],
-            "assistant_message": "Backtest failed unexpectedly.",
+            "errors": ["mcp_tool_failed"],
+            "assistant_message": "The strategy research tool failed.",
         }
 
     return {**state, "status": "success", "backtest_result": result}
@@ -195,12 +215,12 @@ def _graph():
     workflow = StateGraph(AgentState)
     workflow.add_node("parse_request_node", parse_request_node)
     workflow.add_node("validate_request_node", validate_request_node)
-    workflow.add_node("run_backtest_node", run_backtest_node)
+    workflow.add_node("run_mcp_research_node", run_mcp_research_node)
     workflow.add_node("format_response_node", format_response_node)
     workflow.set_entry_point("parse_request_node")
     workflow.add_edge("parse_request_node", "validate_request_node")
-    workflow.add_edge("validate_request_node", "run_backtest_node")
-    workflow.add_edge("run_backtest_node", "format_response_node")
+    workflow.add_edge("validate_request_node", "run_mcp_research_node")
+    workflow.add_edge("run_mcp_research_node", "format_response_node")
     workflow.add_edge("format_response_node", END)
     return workflow.compile()
 

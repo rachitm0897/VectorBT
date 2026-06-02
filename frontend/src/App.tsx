@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   fetchAnalyticsStatus,
+  fetchMCPStatus,
   runBacktest,
   runChat,
   type AnalyticsStatus,
   type BacktestRequest,
   type BacktestResult,
+  type MCPStatus,
   type StrategyName,
 } from "./api/client";
 import BacktestForm, { buildBacktestPayload } from "./components/BacktestForm";
@@ -13,6 +15,7 @@ import ChatPanel from "./components/ChatPanel";
 import AppShell from "./components/layout/AppShell";
 import Sidebar from "./components/layout/Sidebar";
 import AnalyticsStatusPanel from "./components/panels/AnalyticsStatusPanel";
+import MCPStatusPanel from "./components/panels/MCPStatusPanel";
 import ParsedRequestPanel from "./components/panels/ParsedRequestPanel";
 import TokenUsagePanel from "./components/panels/TokenUsagePanel";
 import ResultDashboard from "./components/ResultDashboard";
@@ -42,9 +45,29 @@ export default function App() {
   const [analyticsStatus, setAnalyticsStatus] = useState<AnalyticsStatus | null>(null);
   const [analyticsStatusError, setAnalyticsStatusError] = useState<string | null>(null);
   const [isAnalyticsStatusLoading, setIsAnalyticsStatusLoading] = useState(true);
+  const [mcpStatus, setMcpStatus] = useState<MCPStatus | null>(null);
+  const [mcpStatusError, setMcpStatusError] = useState<string | null>(null);
+  const [isMcpStatusLoading, setIsMcpStatusLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
+
+    fetchMCPStatus()
+      .then((status) => {
+        if (!isMounted) return;
+        setMcpStatus(status);
+        setMcpStatusError(null);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setMcpStatus(null);
+        setMcpStatusError(error instanceof Error ? error.message : "MCP status unavailable.");
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsMcpStatusLoading(false);
+        }
+      });
 
     fetchAnalyticsStatus()
       .then((status) => {
@@ -177,6 +200,11 @@ export default function App() {
           />
           <ParsedRequestPanel parsedRequest={parsedRequest} result={result} />
           <TokenUsagePanel diagnostics={diagnostics || result?.diagnostics} usedChat={usedChat} />
+          <MCPStatusPanel
+            status={mcpStatus}
+            isLoading={isMcpStatusLoading}
+            error={mcpStatusError}
+          />
           <AnalyticsStatusPanel
             status={analyticsStatus}
             isLoading={isAnalyticsStatusLoading}

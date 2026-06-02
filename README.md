@@ -21,6 +21,12 @@ ANALYTICS_DB_HOST=analytics_db
 ANALYTICS_DB_PORT=5432
 ANALYTICS_ENABLED=true
 METABASE_URL=http://localhost:3000
+MCP_ENABLED=true
+MCP_TRANSPORT=stdio
+MCP_SERVER_COMMAND=python
+MCP_SERVER_ARGS=standalone_mcp_server/server.py
+MCP_CALL_TIMEOUT_SECONDS=120
+MCP_DEFAULT_TOOL=run_strategy_research
 ```
 
 ## Run Full App With Docker
@@ -174,10 +180,73 @@ The chat endpoint is deliberately token-minimal:
 1. `parse_request_node` checks `backend/cache/parsed_requests/` by user-message hash. On a cache hit, it skips the LLM.
 2. On a cache miss, the LLM receives only a compact parser prompt, supported strategies, defaults, ticker aliases, and the current user message.
 3. `validate_request_node` fills defaults and validates the parsed JSON in Python.
-4. `run_backtest_node` calls the existing deterministic VectorBT backtest function directly.
+4. `run_mcp_research_node` calls the standalone MCP server through a backend MCP client.
 5. `format_response_node` creates a short template-based assistant message without a second LLM call.
 
 The LLM never receives OHLCV arrays, equity curves, trades, Monte Carlo paths, raw VectorBT output, or previous chat history.
+
+## Using MCP Client for Strategy Research
+
+The LLM no longer calls internal financial tools in the main chat flow. It only parses the request into structured JSON. Django then calls the standalone MCP server through an MCP client and invokes `run_strategy_research`.
+
+Flow:
+
+```text
+User chat
+ -> LLM parser
+ -> structured JSON
+ -> MCP client
+ -> standalone MCP server
+ -> run_strategy_research
+ -> artifact JSON
+ -> React dashboard
+```
+
+Required MCP env vars:
+
+```env
+MCP_ENABLED=true
+MCP_TRANSPORT=stdio
+MCP_SERVER_COMMAND=python
+MCP_SERVER_ARGS=standalone_mcp_server/server.py
+MCP_CALL_TIMEOUT_SECONDS=120
+```
+
+Run the standalone MCP server manually:
+
+```bash
+cd standalone_mcp_server
+python server.py
+```
+
+The stdio MCP client normally starts the server as a subprocess, so manual startup is only for debugging.
+
+Test MCP status:
+
+```text
+GET http://localhost:8000/api/mcp/status/
+```
+
+Test chat flow:
+
+```text
+POST http://localhost:8000/api/chat/
+```
+
+Example body:
+
+```json
+{
+  "message": "Backtest AAPL using RSI. Buy below 30 and sell above 70. Run Monte Carlo for 60 days."
+}
+```
+
+Notes:
+
+- This is a prototype.
+- Stdio transport starts the MCP server as a subprocess.
+- For Docker, the backend and `standalone_mcp_server` need access to the same filesystem or a shared mounted volume for artifacts.
+- MCP failures return clean frontend errors and should not expose tracebacks.
 
 Chat endpoint:
 
@@ -293,7 +362,8 @@ PowerShell users should call `curl.exe` and escape JSON quotes if using `-d` inl
 ## Notes
 
 - Only daily candles are supported.
-- Finnhub responses are cached under `backend/cache/market_data/`.
+- Manual `/api/backtest/` Finnhub responses are cached under `backend/cache/market_data/`.
+- Chat/MCP Finnhub responses and artifacts are cached under `standalone_mcp_server/cache/`.
 - Parsed chat requests are cached under `backend/cache/parsed_requests/`.
 - Cache keys include symbol, resolution, start timestamp, and end timestamp.
 - SQLite is used only for Django's default local setup.

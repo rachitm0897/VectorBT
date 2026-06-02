@@ -73,3 +73,9 @@ CORS_ALLOWED_ORIGINS = [
 ]
 OPENAI_API_BASE_URL = os.getenv("OPENAI_API_BASE_URL") or "https://api.openai.com/v1"
 METABASE_URL = os.getenv("METABASE_URL") or "http://localhost:3000"
+MCP_ENABLED = os.getenv("MCP_ENABLED", "true").lower() == "true"
+MCP_TRANSPORT = os.getenv("MCP_TRANSPORT") or "stdio"
+MCP_SERVER_COMMAND = os.getenv("MCP_SERVER_COMMAND") or "python"
+MCP_SERVER_ARGS = os.getenv("MCP_SERVER_ARGS") or "standalone_mcp_server/server.py"
+MCP_CALL_TIMEOUT_SECONDS = float(os.getenv("MCP_CALL_TIMEOUT_SECONDS") or "120")
+MCP_DEFAULT_TOOL = os.getenv("MCP_DEFAULT_TOOL") or "run_strategy_research"

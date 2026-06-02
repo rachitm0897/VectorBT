@@ -106,12 +106,23 @@ export type ChatResponse = {
   warnings?: string[];
   errors?: string[];
   missing_fields?: string[];
+  details?: string;
 };
 
 export type AnalyticsStatus = {
   enabled: boolean;
   connected: boolean;
   metabase_url: string;
+};
+
+export type MCPStatus = {
+  enabled: boolean;
+  transport: string;
+  server_command: string;
+  server_args: string;
+  connected: boolean;
+  tools: string[];
+  error: string | null;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -183,5 +194,23 @@ export async function fetchAnalyticsStatus(): Promise<AnalyticsStatus> {
     enabled: Boolean(data.enabled),
     connected: Boolean(data.connected),
     metabase_url: data.metabase_url || "http://localhost:3000",
+  };
+}
+
+export async function fetchMCPStatus(): Promise<MCPStatus> {
+  const response = await fetch(`${API_BASE_URL}/api/mcp/status/`);
+  if (!response.ok) {
+    throw new Error("MCP status request failed.");
+  }
+
+  const data = (await response.json()) as Partial<MCPStatus>;
+  return {
+    enabled: Boolean(data.enabled),
+    transport: data.transport || "stdio",
+    server_command: data.server_command || "python",
+    server_args: data.server_args || "standalone_mcp_server/server.py",
+    connected: Boolean(data.connected),
+    tools: Array.isArray(data.tools) ? data.tools : [],
+    error: data.error || null,
   };
 }
