@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.backtesting",
     "apps.agent",
     "apps.analytics",
+    "apps.seeding",
 ]
 
 MIDDLEWARE = [

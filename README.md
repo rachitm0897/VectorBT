@@ -73,6 +73,55 @@ docker compose down -v
 - MCP Tool Calls
 - Data Quality
 
+## Full Research Data Seeding
+
+Run the full real research seed through the existing backend -> MCP -> analytics persistence path:
+
+```bash
+docker compose exec backend python manage.py seed_full_research_data --finnhub-api-key "YOUR_FINNHUB_KEY"
+```
+
+The seed runs:
+
+- 810 strategy backtests
+- 96 Markowitz optimizations
+- 906 total jobs
+
+Selected 30 stocks:
+
+```text
+AAPL, MSFT, NVDA, GOOGL, META, AMZN, TSLA, AVGO, JPM, BAC, GS, V, MA, XOM, CVX, COP, JNJ, LLY, UNH, ABBV, MRK, HD, NKE, SBUX, MCD, WMT, AMD, CRM, CAT, BA
+```
+
+Optional flags:
+
+```text
+--force
+--dry-run
+--max-runs 100
+--sleep 1.0
+--skip-backtests
+--skip-markowitz
+--fail-on-error
+```
+
+The command prints per-job progress, skips successful existing analytics rows by deterministic run ID, continues after individual failures, and prints a final summary.
+
+After seeding, open Metabase:
+
+```text
+http://localhost:3000
+```
+
+Useful validation SQL:
+
+```sql
+SELECT COUNT(*) FROM backtest_runs;
+SELECT COUNT(*) FROM portfolio_optimization_runs;
+SELECT COUNT(*) FROM portfolio_weights;
+SELECT COUNT(*) FROM mcp_tool_calls;
+```
+
 ## Example SQL
 
 Strategy comparison:

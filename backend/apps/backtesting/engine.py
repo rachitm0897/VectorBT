@@ -38,8 +38,17 @@ def run_backtest(
     if result.get("status") == "success":
         analytics_result = dict(result)
         analytics_result["_analytics_request"] = dict(validated_request)
+        _apply_explicit_analytics_run_id(analytics_result, validated_request)
         persist_backtest_result(analytics_result, source=analytics_source)
     return result
+
+
+def run_structured_backtest(
+    payload: dict,
+    finnhub_api_key: str | None = None,
+    analytics_source: str = "api",
+) -> dict:
+    return run_backtest(payload, finnhub_api_key=finnhub_api_key, analytics_source=analytics_source)
 
 
 def run_portfolio_optimization(
@@ -63,8 +72,23 @@ def run_portfolio_optimization(
     if result.get("status") == "success":
         analytics_result = dict(result)
         analytics_result["_analytics_request"] = dict(validated_request)
+        _apply_explicit_analytics_run_id(analytics_result, validated_request)
         persist_portfolio_optimization_result(analytics_result, source=analytics_source)
     return result
+
+
+def run_structured_portfolio_optimization(
+    payload: dict,
+    finnhub_api_key: str | None = None,
+    analytics_source: str = "api",
+) -> dict:
+    return run_portfolio_optimization(payload, finnhub_api_key=finnhub_api_key, analytics_source=analytics_source)
+
+
+def _apply_explicit_analytics_run_id(result: dict, validated_request: dict) -> None:
+    run_id = validated_request.get("run_id") or validated_request.get("_analytics_run_id")
+    if run_id:
+        result["run_id"] = str(run_id)
 
 
 def run_local_backtest(validated_request: dict, finnhub_api_key: str | None = None) -> dict:

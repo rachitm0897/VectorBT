@@ -85,7 +85,12 @@ def persist_backtest_result(result: dict, source: str = "api") -> None:
         monte_carlo = request.get("monte_carlo") if isinstance(request.get("monte_carlo"), dict) else {}
         symbol = safe_str(public_request.get("symbol") or request.get("symbol"), 32)
         strategy = safe_str(public_request.get("strategy") or request.get("strategy"), 128)
-        run_id = safe_str(mcp.get("run_id") or result.get("run_id"), 128) or f"bt_{uuid.uuid4().hex[:12]}"
+        run_id = (
+            safe_str(result.get("run_id"), 128)
+            or safe_str(request.get("run_id"), 128)
+            or safe_str(mcp.get("run_id"), 128)
+            or f"bt_{uuid.uuid4().hex[:12]}"
+        )
 
         row = {
             "run_id": run_id,
@@ -192,7 +197,9 @@ def persist_portfolio_optimization_result(result: dict, source: str = "api") -> 
         symbols_used = portfolio_result.get("symbols_used") or portfolio_result.get("symbols")
         symbols_used_count = len(symbols_used) if isinstance(symbols_used, list) else None
         run_id = (
-            safe_str(portfolio_result.get("artifact_id"), 128)
+            safe_str(result.get("run_id"), 128)
+            or safe_str(request.get("run_id"), 128)
+            or safe_str(portfolio_result.get("artifact_id"), 128)
             or safe_str(mcp.get("artifact_id"), 128)
             or f"po_{uuid.uuid4().hex[:12]}"
         )

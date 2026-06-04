@@ -113,6 +113,8 @@ services:
       METABASE_URL: ${METABASE_URL:-http://localhost:3000}
       OPENAI_API_KEY: ""
       FINNHUB_API_KEY: ""
+    volumes:
+      - ./mcp/us_stocks_only_universe.json:/app/mcp/us_stocks_only_universe.json:ro
     command: python manage.py runserver 0.0.0.0:8000 --noreload
     networks:
       - insta_local
