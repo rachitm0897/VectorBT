@@ -17,6 +17,6 @@ class SimpleCorsMiddleware:
             response["Access-Control-Allow-Origin"] = origin
             response["Vary"] = "Origin"
             response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-OpenAI-API-Key, X-Finnhub-API-Key"
 
         return response

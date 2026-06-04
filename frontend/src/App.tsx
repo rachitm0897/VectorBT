@@ -1,25 +1,38 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  fetchAnalyticsStatus,
-  fetchMCPStatus,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_CHAT_URL,
+  getMcpStatus,
   runBacktest,
   runChat,
-  type AnalyticsStatus,
+  runPortfolioOptimization,
+  type ApiKeys,
   type BacktestRequest,
   type BacktestResult,
   type MCPStatus,
+  type PortfolioOptimizationRequest,
+  type PortfolioResult,
   type StrategyName,
 } from "./api/client";
+import ApiKeyPanel from "./components/ApiKeyPanel";
 import BacktestForm, { buildBacktestPayload } from "./components/BacktestForm";
 import ChatPanel from "./components/ChatPanel";
+import PortfolioOptimizerPanel from "./components/PortfolioOptimizerPanel";
 import AppShell from "./components/layout/AppShell";
+import CollapsiblePanel from "./components/layout/CollapsiblePanel";
 import Sidebar from "./components/layout/Sidebar";
-import AnalyticsStatusPanel from "./components/panels/AnalyticsStatusPanel";
-import MCPStatusPanel from "./components/panels/MCPStatusPanel";
+import McpStatusPanel from "./components/panels/McpStatusPanel";
 import ParsedRequestPanel from "./components/panels/ParsedRequestPanel";
 import TokenUsagePanel from "./components/panels/TokenUsagePanel";
 import ResultDashboard from "./components/ResultDashboard";
+import PortfolioResultDashboard from "./components/portfolio/PortfolioResultDashboard";
 
+const emptyApiKeys: ApiKeys = {
+  chatUrl: DEFAULT_CHAT_URL,
+  chatApiKey: "",
+  model: DEFAULT_CHAT_MODEL,
+  finnhubApiKey: "",
+};
 const defaultParameters: Record<StrategyName, string> = {
   sma_crossover: JSON.stringify({ fast_window: 20, slow_window: 50 }, null, 2),
   rsi_mean_reversion: JSON.stringify({ rsi_window: 14, lower: 30, upper: 70 }, null, 2),
@@ -35,61 +48,21 @@ export default function App() {
   const [initialCash, setInitialCash] = useState(10000);
   const [fees, setFees] = useState(0.001);
   const [result, setResult] = useState<BacktestResult | null>(null);
+  const [portfolioResult, setPortfolioResult] = useState<PortfolioResult | null>(null);
+  const [activeWorkflow, setActiveWorkflow] = useState<"backtest" | "portfolio">("backtest");
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
-  const [parsedRequest, setParsedRequest] = useState<BacktestRequest | Record<string, unknown> | null>(null);
+  const [parsedRequest, setParsedRequest] = useState<
+    BacktestRequest | PortfolioOptimizationRequest | Record<string, unknown> | null
+  >(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
   const [usedChat, setUsedChat] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [analyticsStatus, setAnalyticsStatus] = useState<AnalyticsStatus | null>(null);
-  const [analyticsStatusError, setAnalyticsStatusError] = useState<string | null>(null);
-  const [isAnalyticsStatusLoading, setIsAnalyticsStatusLoading] = useState(true);
+  const [apiKeys, setApiKeys] = useState<ApiKeys>(emptyApiKeys);
   const [mcpStatus, setMcpStatus] = useState<MCPStatus | null>(null);
   const [mcpStatusError, setMcpStatusError] = useState<string | null>(null);
-  const [isMcpStatusLoading, setIsMcpStatusLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    fetchMCPStatus()
-      .then((status) => {
-        if (!isMounted) return;
-        setMcpStatus(status);
-        setMcpStatusError(null);
-      })
-      .catch((error) => {
-        if (!isMounted) return;
-        setMcpStatus(null);
-        setMcpStatusError(error instanceof Error ? error.message : "MCP status unavailable.");
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsMcpStatusLoading(false);
-        }
-      });
-
-    fetchAnalyticsStatus()
-      .then((status) => {
-        if (!isMounted) return;
-        setAnalyticsStatus(status);
-        setAnalyticsStatusError(null);
-      })
-      .catch((error) => {
-        if (!isMounted) return;
-        setAnalyticsStatus(null);
-        setAnalyticsStatusError(error instanceof Error ? error.message : "Analytics status unavailable.");
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsAnalyticsStatusLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const [isMcpStatusLoading, setIsMcpStatusLoading] = useState(false);
 
   const parseError = useMemo(() => {
     try {
@@ -100,14 +73,52 @@ export default function App() {
     }
   }, [parametersText]);
 
+  const configSummary = useMemo(() => {
+    const missing = [!apiKeys.chatApiKey.trim() ? "Chat key" : "", !apiKeys.finnhubApiKey.trim() ? "Finnhub" : ""].filter(Boolean);
+    return missing.length ? `Missing ${missing.join(", ")}` : `${apiKeys.model.trim() || DEFAULT_CHAT_MODEL}`;
+  }, [apiKeys.chatApiKey, apiKeys.finnhubApiKey, apiKeys.model]);
+
+  const mcpSummary = useMemo(() => {
+    if (isMcpStatusLoading) return "Checking";
+    if (mcpStatusError) return "Error";
+    if (!mcpStatus) return "Unknown";
+    if (!mcpStatus.enabled) return "Disabled";
+    return mcpStatus.connected ? "Connected" : "Offline";
+  }, [isMcpStatusLoading, mcpStatus, mcpStatusError]);
+
+  const shouldOpenConfig = !apiKeys.chatApiKey.trim() || !apiKeys.finnhubApiKey.trim();
+
   function handleStrategyChange(nextStrategy: StrategyName) {
     setStrategy(nextStrategy);
     setParametersText(defaultParameters[nextStrategy]);
   }
 
+  const refreshMcpStatus = useCallback(async () => {
+    setIsMcpStatusLoading(true);
+    setMcpStatusError(null);
+    try {
+      const response = await getMcpStatus();
+      setMcpStatus(response);
+    } catch (error) {
+      setMcpStatusError(error instanceof Error ? error.message : "MCP status check failed.");
+    } finally {
+      setIsMcpStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshMcpStatus();
+  }, [refreshMcpStatus]);
+
   async function handleSubmit() {
+    setActiveWorkflow("backtest");
     if (parseError) {
       setError("Fix the parameters JSON before running the backtest.");
+      return;
+    }
+
+    if (!apiKeys.finnhubApiKey.trim()) {
+      setError("Finnhub API key is required for market data.");
       return;
     }
 
@@ -125,12 +136,14 @@ export default function App() {
         initialCash,
         fees,
       );
-      const response = await runBacktest(payload);
+      const response = await runBacktest(payload, apiKeys);
       setResult(response);
+      setPortfolioResult(null);
       setParsedRequest(payload);
       setDiagnostics(response.diagnostics || null);
       setUsedChat(false);
       setAssistantMessage(null);
+      void refreshMcpStatus();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Backtest failed.");
     } finally {
@@ -139,12 +152,24 @@ export default function App() {
   }
 
   async function handleChatSubmit(message: string) {
+    if (!apiKeys.chatApiKey.trim()) {
+      setChatError("Chat API key is required for natural language parsing.");
+      setError("Chat API key is required for natural language parsing.");
+      return;
+    }
+
+    if (!apiKeys.finnhubApiKey.trim()) {
+      setChatError("Finnhub API key is required for market data.");
+      setError("Finnhub API key is required for market data.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setChatError(null);
 
     try {
-      const response = await runChat(message);
+      const response = await runChat(message, apiKeys);
       setAssistantMessage(response.assistant_message || null);
       setParsedRequest(response.parsed_request || null);
       setDiagnostics(response.diagnostics || response.backtest_result?.diagnostics || null);
@@ -157,13 +182,46 @@ export default function App() {
         return;
       }
 
-      if (response.backtest_result) {
+      if (response.result_type === "portfolio_optimization" && response.portfolio_result) {
+        setPortfolioResult(response.portfolio_result);
+        setActiveWorkflow("portfolio");
+      } else if (response.backtest_result) {
         setResult(response.backtest_result);
+        setPortfolioResult(null);
+        setActiveWorkflow("backtest");
       }
+      void refreshMcpStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Chat request failed.";
       setChatError(message);
       setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handlePortfolioSubmit(payload: PortfolioOptimizationRequest) {
+    setActiveWorkflow("portfolio");
+    setIsLoading(true);
+    setError(null);
+    setChatError(null);
+
+    if (!apiKeys.finnhubApiKey.trim()) {
+      setIsLoading(false);
+      setError("Finnhub API key is required for market data.");
+      return;
+    }
+
+    try {
+      const response = await runPortfolioOptimization(payload, apiKeys);
+      setPortfolioResult(response.portfolio_result || null);
+      setParsedRequest(response.parsed_request || payload);
+      setDiagnostics(response.diagnostics || null);
+      setUsedChat(false);
+      setAssistantMessage(response.assistant_message || null);
+      void refreshMcpStatus();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Portfolio optimization failed.");
     } finally {
       setIsLoading(false);
     }
@@ -179,48 +237,75 @@ export default function App() {
             error={chatError}
             onSend={handleChatSubmit}
           />
-          <BacktestForm
-            symbol={symbol}
-            strategy={strategy}
-            parametersText={parametersText}
-            lookback={lookback}
-            monteCarloDays={monteCarloDays}
-            initialCash={initialCash}
-            fees={fees}
-            isLoading={isLoading}
-            parseError={parseError}
-            onSymbolChange={setSymbol}
-            onStrategyChange={handleStrategyChange}
-            onParametersTextChange={setParametersText}
-            onLookbackChange={setLookback}
-            onMonteCarloDaysChange={setMonteCarloDays}
-            onInitialCashChange={setInitialCash}
-            onFeesChange={setFees}
-            onSubmit={handleSubmit}
-          />
-          <ParsedRequestPanel parsedRequest={parsedRequest} result={result} />
-          <TokenUsagePanel diagnostics={diagnostics || result?.diagnostics} usedChat={usedChat} />
-          <MCPStatusPanel
-            status={mcpStatus}
-            isLoading={isMcpStatusLoading}
-            error={mcpStatusError}
-          />
-          <AnalyticsStatusPanel
-            status={analyticsStatus}
-            isLoading={isAnalyticsStatusLoading}
-            error={analyticsStatusError}
-          />
+
+          <CollapsiblePanel title="LLM / API Configuration" defaultOpen={shouldOpenConfig} summary={configSummary}>
+            <ApiKeyPanel apiKeys={apiKeys} onChange={setApiKeys} />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Manual Backtest" defaultOpen={false} summary={`${symbol.toUpperCase()} / ${lookback}`}>
+            <BacktestForm
+              symbol={symbol}
+              strategy={strategy}
+              parametersText={parametersText}
+              lookback={lookback}
+              monteCarloDays={monteCarloDays}
+              initialCash={initialCash}
+              fees={fees}
+              isLoading={isLoading}
+              parseError={parseError}
+              onSymbolChange={setSymbol}
+              onStrategyChange={handleStrategyChange}
+              onParametersTextChange={setParametersText}
+              onLookbackChange={setLookback}
+              onMonteCarloDaysChange={setMonteCarloDays}
+              onInitialCashChange={setInitialCash}
+              onFeesChange={setFees}
+              onSubmit={handleSubmit}
+            />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Portfolio Optimizer" defaultOpen={false} summary="All stocks and sectors">
+            <PortfolioOptimizerPanel isLoading={isLoading} onSubmit={handlePortfolioSubmit} />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="MCP Diagnostics" defaultOpen={false} summary={mcpSummary}>
+            <McpStatusPanel
+              status={mcpStatus}
+              isLoading={isMcpStatusLoading}
+              error={mcpStatusError}
+              diagnostics={diagnostics || result?.diagnostics || null}
+              result={result}
+              onRefresh={refreshMcpStatus}
+            />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Parsed Request" defaultOpen={false} summary={parsedRequest ? "Latest intent" : "Empty"}>
+            <ParsedRequestPanel parsedRequest={parsedRequest} result={result} variant="plain" />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Token / Cache" defaultOpen={false} summary={usedChat ? "Chat run" : "No chat run"}>
+            <TokenUsagePanel diagnostics={diagnostics || result?.diagnostics} usedChat={usedChat} variant="plain" />
+          </CollapsiblePanel>
         </Sidebar>
       }
     >
-      <ResultDashboard
-        result={result}
-        isLoading={isLoading}
-        error={error}
-        parsedRequest={parsedRequest}
-        diagnostics={diagnostics}
-        usedChat={usedChat}
-      />
+      {activeWorkflow === "portfolio" ? (
+        <PortfolioResultDashboard
+          result={portfolioResult}
+          isLoading={isLoading}
+          error={error}
+          parsedRequest={parsedRequest}
+        />
+      ) : (
+        <ResultDashboard
+          result={result}
+          isLoading={isLoading}
+          error={error}
+          parsedRequest={parsedRequest}
+          diagnostics={diagnostics}
+          usedChat={usedChat}
+        />
+      )}
     </AppShell>
   );
 }

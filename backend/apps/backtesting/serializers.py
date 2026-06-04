@@ -25,3 +25,55 @@ class BacktestRequestSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError("symbol is required.")
         return value
+
+
+class PortfolioOptimizationRequestSerializer(serializers.Serializer):
+    symbols = serializers.ListField(
+        child=serializers.CharField(max_length=32),
+        max_length=20,
+        required=False,
+        default=list,
+        allow_empty=True,
+    )
+    sector = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    lookback = serializers.ChoiceField(
+        choices=["1mo", "6mo", "1y", "2y", "5y"],
+        required=False,
+        default="2y",
+    )
+    resolution = serializers.ChoiceField(choices=["D"], required=False, default="D")
+    objective = serializers.ChoiceField(
+        choices=["max_sharpe", "min_volatility"],
+        required=False,
+        default="max_sharpe",
+    )
+    risk_free_rate = serializers.FloatField(required=False, default=0.0, min_value=0.0, max_value=0.25)
+    allow_short = serializers.BooleanField(required=False, default=False)
+    max_weight = serializers.FloatField(required=False, default=0.6, min_value=0.05, max_value=1.0)
+    num_frontier_portfolios = serializers.IntegerField(required=False, default=3000, min_value=100, max_value=10000)
+
+    def validate_symbols(self, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw_symbol in value:
+            symbol = str(raw_symbol or "").strip().upper()
+            if ":" in symbol:
+                symbol = symbol.split(":")[-1]
+            if not symbol:
+                continue
+            if symbol not in seen:
+                normalized.append(symbol)
+                seen.add(symbol)
+
+        return normalized
+
+    def validate(self, attrs):
+        symbols = attrs.get("symbols") or []
+        sector = str(attrs.get("sector") or "").strip()
+        attrs["sector"] = sector
+
+        if symbols and len(symbols) < 2:
+            raise serializers.ValidationError({"symbols": "At least two symbols are required."})
+        if not symbols and not sector:
+            raise serializers.ValidationError("Provide either symbols or a sector for portfolio optimization.")
+        return attrs

@@ -6,6 +6,8 @@ import pandas as pd
 import requests
 from django.conf import settings
 
+from apps.api_keys import resolve_finnhub_api_key
+
 
 class MarketDataError(Exception):
     def __init__(self, code: str, message: str):
@@ -13,25 +15,37 @@ class MarketDataError(Exception):
         super().__init__(message)
 
 
-def fetch_daily_ohlcv(symbol: str, resolution: str, start_ts: int, end_ts: int) -> pd.DataFrame:
+def fetch_daily_ohlcv(
+    symbol: str,
+    resolution: str,
+    start_ts: int,
+    end_ts: int,
+    api_key: str | None = None,
+) -> pd.DataFrame:
     if resolution != "D":
         raise MarketDataError("invalid_resolution", "Only daily Finnhub candles are supported.")
 
-    payload = _load_or_fetch_payload(symbol, resolution, start_ts, end_ts)
+    payload = _load_or_fetch_payload(symbol, resolution, start_ts, end_ts, api_key=api_key)
     return _payload_to_dataframe(payload)
 
 
-def _load_or_fetch_payload(symbol: str, resolution: str, start_ts: int, end_ts: int) -> dict:
+def _load_or_fetch_payload(
+    symbol: str,
+    resolution: str,
+    start_ts: int,
+    end_ts: int,
+    api_key: str | None = None,
+) -> dict:
     cache_path = _cache_path(symbol, resolution, start_ts, end_ts)
     if cache_path.exists():
         with cache_path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
 
-    api_key = settings.FINNHUB_API_KEY
+    api_key = resolve_finnhub_api_key(api_key)
     if not api_key:
         raise MarketDataError(
             "missing_finnhub_api_key",
-            "FINNHUB_API_KEY is required when no cached market data is available.",
+            "Finnhub API key is required when no cached market data is available.",
         )
 
     response = requests.get(

@@ -24,6 +24,7 @@ class MarketDataRequest(BaseModel):
     symbol: str = Field(min_length=1)
     lookback: Lookback = "2y"
     resolution: Resolution = "D"
+    finnhub_api_key: str | None = Field(default=None, exclude=True)
 
 
 class StrategyBacktestRequest(MarketDataRequest):

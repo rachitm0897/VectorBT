@@ -72,18 +72,13 @@ export default function BacktestForm({
   onSubmit,
 }: BacktestFormProps) {
   return (
-    <section className="panel-shell p-4">
-      <div className="mb-4 border-b border-line pb-3">
-        <h2 className="section-title">Simple Form Mode</h2>
-      </div>
-
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-2">
             <span className="form-label">Symbol</span>
@@ -179,7 +174,6 @@ export default function BacktestForm({
         >
           {isLoading ? "Running Backtest" : "Run Backtest"}
         </button>
-      </form>
-    </section>
+    </form>
   );
 }

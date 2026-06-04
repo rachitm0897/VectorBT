@@ -1,0 +1,1818 @@
+{
+  "meta": {
+    "source_file": "us_exchange_tickers(1).json",
+    "description": "US common-stock-only universe. ETFs, leveraged ETFs, REIT/income instruments, commodities, fixed income, index/options instruments, and non-US/Indian symbols removed.",
+    "created_at": "2026-05-27T09:41:56.873537+00:00",
+    "input_exchange_traded_ticker_count": 206,
+    "output_us_stock_count": 49,
+    "filter_rules": [
+      "country == US",
+      "currency == USD",
+      "asset_class == us_equity",
+      "instrument_type == stock",
+      "source_sheets contains US Stocks",
+      "exclude .NS/.BO symbols",
+      "exclude ETFs, commodities, fixed income, REIT/income, index/options and non-exchange-traded instruments"
+    ],
+    "removed_count": 157,
+    "removed_asset_class_counts": {
+      "leveraged_etf": 34,
+      "reit_income": 33,
+      "us_etf": 31,
+      "index_or_futures_option": 20,
+      "commodity": 17,
+      "fixed_income": 12,
+      "option_underlying": 10
+    }
+  },
+  "symbols": [
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "GOOGL",
+    "META",
+    "AMZN",
+    "TSLA",
+    "AVGO",
+    "JPM",
+    "BAC",
+    "GS",
+    "V",
+    "MA",
+    "BRK.B",
+    "WFC",
+    "C",
+    "XOM",
+    "CVX",
+    "COP",
+    "SLB",
+    "OXY",
+    "JNJ",
+    "LLY",
+    "UNH",
+    "ABBV",
+    "MRK",
+    "PFE",
+    "HD",
+    "NKE",
+    "SBUX",
+    "MCD",
+    "KO",
+    "PG",
+    "WMT",
+    "AMD",
+    "CRM",
+    "NOW",
+    "PLTR",
+    "SNOW",
+    "MSTR",
+    "INTC",
+    "QCOM",
+    "CAT",
+    "BA",
+    "GE",
+    "DE",
+    "NFLX",
+    "DIS",
+    "UBER"
+  ],
+  "tickers": [
+    {
+      "ticker": "AAPL",
+      "symbol": "AAPL",
+      "exchange_symbol": "AAPL",
+      "name": "Apple Inc.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:AAPL",
+      "backtest_ticker": "NASDAQ:AAPL",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "AAPL",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$3.1T",
+        "Approx Price": "~$195",
+        "Strategy Fit": "CC · CSP · WHL · IC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "Med (25-35)",
+        "Risk Level": "Low",
+        "Notes": "Highest options liquidity — ideal wheel stock"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Mega Tech",
+          "IV Rank": "22-35",
+          "Avg Spread": "$0.01-0.02",
+          "Best Strategy": "CC · CSP · WHL",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "Most liquid single stock options"
+        }
+      }
+    },
+    {
+      "ticker": "MSFT",
+      "symbol": "MSFT",
+      "exchange_symbol": "MSFT",
+      "name": "Microsoft Corp.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:MSFT",
+      "backtest_ticker": "NASDAQ:MSFT",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "MSFT",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$2.9T",
+        "Approx Price": "~$415",
+        "Strategy Fit": "CC · CSP · WHL · IC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "Med (24-32)",
+        "Risk Level": "Low",
+        "Notes": "Consistent theta decay; quarterly earnings risk"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Mega Tech",
+          "IV Rank": "20-32",
+          "Avg Spread": "$0.01-0.02",
+          "Best Strategy": "CC · CSP · WHL",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "Consistent IV; great for wheel"
+        }
+      }
+    },
+    {
+      "ticker": "NVDA",
+      "symbol": "NVDA",
+      "exchange_symbol": "NVDA",
+      "name": "NVIDIA Corp.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:NVDA",
+      "backtest_ticker": "NASDAQ:NVDA",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "NVDA",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$2.1T",
+        "Approx Price": "~$870",
+        "Strategy Fit": "MC · CC · CSP",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "High (45-70)",
+        "Risk Level": "Med-High",
+        "Notes": "High IV = rich premiums; earnings volatile"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Mega Tech",
+          "IV Rank": "45-70",
+          "Avg Spread": "$0.02-0.05",
+          "Best Strategy": "CC · CSP · MC",
+          "Ideal DTE Range": "21-35 DTE",
+          "Ideal Delta": "0.25-0.30",
+          "Notes": "Rich premiums; manage around earnings"
+        }
+      }
+    },
+    {
+      "ticker": "GOOGL",
+      "symbol": "GOOGL",
+      "exchange_symbol": "GOOGL",
+      "name": "Alphabet Inc.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:GOOGL",
+      "backtest_ticker": "NASDAQ:GOOGL",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "GOOGL",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$1.9T",
+        "Approx Price": "~$168",
+        "Strategy Fit": "CC · CSP · MC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "Med (22-30)",
+        "Risk Level": "Low",
+        "Notes": "Large cap stability; good for covered calls"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Mega Tech",
+          "IV Rank": "20-30",
+          "Avg Spread": "$0.02-0.04",
+          "Best Strategy": "CC · CSP",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "Post-split more accessible; lower IV"
+        }
+      }
+    },
+    {
+      "ticker": "META",
+      "symbol": "META",
+      "exchange_symbol": "META",
+      "name": "Meta Platforms",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:META",
+      "backtest_ticker": "NASDAQ:META",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "META",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$1.3T",
+        "Approx Price": "~$490",
+        "Strategy Fit": "CC · MC · IC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "High (35-50)",
+        "Risk Level": "Med-High",
+        "Notes": "High beta; momentum and options strategies"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Mega Tech",
+          "IV Rank": "35-55",
+          "Avg Spread": "$0.02-0.04",
+          "Best Strategy": "CC · IC · Spreads",
+          "Ideal DTE Range": "21-45 DTE",
+          "Ideal Delta": "0.25-0.30",
+          "Notes": "High IV; good condor underlying"
+        }
+      }
+    },
+    {
+      "ticker": "AMZN",
+      "symbol": "AMZN",
+      "exchange_symbol": "AMZN",
+      "name": "Amazon.com Inc.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:AMZN",
+      "backtest_ticker": "NASDAQ:AMZN",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "AMZN",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$1.9T",
+        "Approx Price": "~$182",
+        "Strategy Fit": "CC · CSP · MC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "Med (28-38)",
+        "Risk Level": "Moderate",
+        "Notes": "E-commerce + cloud; smooth trend profile"
+      },
+      "metadata_by_sheet": {
+        "US Stocks": {
+          "Sector": "Consumer Disc.",
+          "Market Cap": "$1.9T",
+          "Approx Price": "~$182",
+          "Strategy Fit": "CC · MC",
+          "Options Avail?": "✅ Excellent",
+          "IV Profile": "Med (28-38)",
+          "Risk Level": "Moderate",
+          "Notes": "(See also Mega Tech)"
+        },
+        "US Options": {
+          "Category": "Mega Tech",
+          "IV Rank": "25-40",
+          "Avg Spread": "$0.02-0.04",
+          "Best Strategy": "CC · CSP · WHL",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "Large premium per contract"
+        }
+      }
+    },
+    {
+      "ticker": "TSLA",
+      "symbol": "TSLA",
+      "exchange_symbol": "TSLA",
+      "name": "Tesla Inc.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:TSLA",
+      "backtest_ticker": "NASDAQ:TSLA",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "TSLA",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Consumer Disc.",
+        "Market Cap": "$550B",
+        "Approx Price": "~$175",
+        "Strategy Fit": "MC · CC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "Very High (60-90)",
+        "Risk Level": "High",
+        "Notes": "Extremely high IV; premiums are very rich"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Mega Tech",
+          "IV Rank": "55-90",
+          "Avg Spread": "$0.02-0.05",
+          "Best Strategy": "CC · IC",
+          "Ideal DTE Range": "14-30 DTE",
+          "Ideal Delta": "0.20-0.30",
+          "Notes": "Extreme IV; dangerous without stops"
+        }
+      }
+    },
+    {
+      "ticker": "AVGO",
+      "symbol": "AVGO",
+      "exchange_symbol": "AVGO",
+      "name": "Broadcom Inc.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:AVGO",
+      "backtest_ticker": "NASDAQ:AVGO",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "AVGO",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$550B",
+        "Approx Price": "~$1250",
+        "Strategy Fit": "CC · CSP · WHL",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "Med (30-40)",
+        "Risk Level": "Moderate",
+        "Notes": "Semiconductor leader; post-split liquidity improving"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "JPM",
+      "symbol": "JPM",
+      "exchange_symbol": "JPM",
+      "name": "JPMorgan Chase",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:JPM",
+      "backtest_ticker": "NYSE:JPM",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "JPM",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$550B",
+        "Approx Price": "~$195",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (18-28)",
+        "Risk Level": "Low",
+        "Notes": "Dividend aristocrat; low IV = stable income"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Financials",
+          "IV Rank": "18-28",
+          "Avg Spread": "$0.02-0.03",
+          "Best Strategy": "CC · DGI · CSP",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "Low IV but consistent income"
+        }
+      }
+    },
+    {
+      "ticker": "BAC",
+      "symbol": "BAC",
+      "exchange_symbol": "BAC",
+      "name": "Bank of America",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:BAC",
+      "backtest_ticker": "NYSE:BAC",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "BAC",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$295B",
+        "Approx Price": "~$38",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (22-30)",
+        "Risk Level": "Low",
+        "Notes": "High dividend yield; excellent for covered calls"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Financials",
+          "IV Rank": "20-30",
+          "Avg Spread": "$0.02-0.03",
+          "Best Strategy": "CC · DGI · CSP",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "High div + options premium combo"
+        }
+      }
+    },
+    {
+      "ticker": "GS",
+      "symbol": "GS",
+      "exchange_symbol": "GS",
+      "name": "Goldman Sachs",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:GS",
+      "backtest_ticker": "NYSE:GS",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "GS",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$140B",
+        "Approx Price": "~$450",
+        "Strategy Fit": "CC · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (24-34)",
+        "Risk Level": "Moderate",
+        "Notes": "Cyclical; momentum plays around earnings"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "V",
+      "symbol": "V",
+      "exchange_symbol": "V",
+      "name": "Visa Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:V",
+      "backtest_ticker": "NYSE:V",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "V",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$520B",
+        "Approx Price": "~$265",
+        "Strategy Fit": "CC · DGI · WHL",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (18-24)",
+        "Risk Level": "Low",
+        "Notes": "Consistent compounder; low IV premium"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "MA",
+      "symbol": "MA",
+      "exchange_symbol": "MA",
+      "name": "Mastercard Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:MA",
+      "backtest_ticker": "NYSE:MA",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "MA",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$420B",
+        "Approx Price": "~$455",
+        "Strategy Fit": "CC · DGI",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (18-24)",
+        "Risk Level": "Low",
+        "Notes": "Mirror of Visa; dividend growth stock"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "BRK.B",
+      "symbol": "BRK.B",
+      "exchange_symbol": "BRK.B",
+      "name": "Berkshire Hathaway B",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:BRK.B",
+      "backtest_ticker": "NYSE:BRK.B",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "BRK.B",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$860B",
+        "Approx Price": "~$390",
+        "Strategy Fit": "CC · DGI",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (15-22)",
+        "Risk Level": "Very Low",
+        "Notes": "No options on BRK.A; B class liquid"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "WFC",
+      "symbol": "WFC",
+      "exchange_symbol": "WFC",
+      "name": "Wells Fargo",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:WFC",
+      "backtest_ticker": "NYSE:WFC",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "WFC",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$195B",
+        "Approx Price": "~$53",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (22-28)",
+        "Risk Level": "Low",
+        "Notes": "Recovery play; decent dividend"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "C",
+      "symbol": "C",
+      "exchange_symbol": "C",
+      "name": "Citigroup",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:C",
+      "backtest_ticker": "NYSE:C",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "C",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Financials",
+        "Market Cap": "$115B",
+        "Approx Price": "~$61",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (24-32)",
+        "Risk Level": "Low",
+        "Notes": "Turnaround story; high dividend yield"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "XOM",
+      "symbol": "XOM",
+      "exchange_symbol": "XOM",
+      "name": "Exxon Mobil",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:XOM",
+      "backtest_ticker": "NYSE:XOM",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "XOM",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Energy",
+        "Market Cap": "$500B",
+        "Approx Price": "~$110",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (25-35)",
+        "Risk Level": "Low",
+        "Notes": "Dividend king; oil price correlated"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "CVX",
+      "symbol": "CVX",
+      "exchange_symbol": "CVX",
+      "name": "Chevron Corp.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:CVX",
+      "backtest_ticker": "NYSE:CVX",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "CVX",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Energy",
+        "Market Cap": "$280B",
+        "Approx Price": "~$155",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (22-32)",
+        "Risk Level": "Low",
+        "Notes": "Low leverage; strong balance sheet"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "COP",
+      "symbol": "COP",
+      "exchange_symbol": "COP",
+      "name": "ConocoPhillips",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:COP",
+      "backtest_ticker": "NYSE:COP",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "COP",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Energy",
+        "Market Cap": "$130B",
+        "Approx Price": "~$110",
+        "Strategy Fit": "CC · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-36)",
+        "Risk Level": "Moderate",
+        "Notes": "Pure E&P; high FCF yield"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "SLB",
+      "symbol": "SLB",
+      "exchange_symbol": "SLB",
+      "name": "SLB (Schlumberger)",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:SLB",
+      "backtest_ticker": "NYSE:SLB",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "SLB",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Energy",
+        "Market Cap": "$65B",
+        "Approx Price": "~$45",
+        "Strategy Fit": "CC · MC · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (30-40)",
+        "Risk Level": "Moderate",
+        "Notes": "Oilfield services; cyclical momentum"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "OXY",
+      "symbol": "OXY",
+      "exchange_symbol": "OXY",
+      "name": "Occidental Petroleum",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:OXY",
+      "backtest_ticker": "NYSE:OXY",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "OXY",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Energy",
+        "Market Cap": "$45B",
+        "Approx Price": "~$58",
+        "Strategy Fit": "CC · CSP · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "High (35-50)",
+        "Risk Level": "Med-High",
+        "Notes": "Buffett stock; oil-levered with options"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "JNJ",
+      "symbol": "JNJ",
+      "exchange_symbol": "JNJ",
+      "name": "Johnson & Johnson",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:JNJ",
+      "backtest_ticker": "NYSE:JNJ",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "JNJ",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Healthcare",
+        "Market Cap": "$380B",
+        "Approx Price": "~$155",
+        "Strategy Fit": "CC · DGI",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (18-24)",
+        "Risk Level": "Low",
+        "Notes": "Dividend King 60+ yr streak; very stable"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "LLY",
+      "symbol": "LLY",
+      "exchange_symbol": "LLY",
+      "name": "Eli Lilly",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:LLY",
+      "backtest_ticker": "NYSE:LLY",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "LLY",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Healthcare",
+        "Market Cap": "$720B",
+        "Approx Price": "~$765",
+        "Strategy Fit": "CC · MC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "High (35-55)",
+        "Risk Level": "Med-High",
+        "Notes": "GLP-1 darling; rich options premiums"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "UNH",
+      "symbol": "UNH",
+      "exchange_symbol": "UNH",
+      "name": "UnitedHealth Group",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:UNH",
+      "backtest_ticker": "NYSE:UNH",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "UNH",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Healthcare",
+        "Market Cap": "$450B",
+        "Approx Price": "~$480",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (22-30)",
+        "Risk Level": "Low",
+        "Notes": "Consistent grower; defensive positioning"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "ABBV",
+      "symbol": "ABBV",
+      "exchange_symbol": "ABBV",
+      "name": "AbbVie Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:ABBV",
+      "backtest_ticker": "NYSE:ABBV",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "ABBV",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Healthcare",
+        "Market Cap": "$295B",
+        "Approx Price": "~$165",
+        "Strategy Fit": "CC · DGI · WHL",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (24-32)",
+        "Risk Level": "Low",
+        "Notes": "~4% yield; Botox + Humira diversification"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Healthcare",
+          "IV Rank": "22-32",
+          "Avg Spread": "$0.02-0.04",
+          "Best Strategy": "CC · DGI · WHL",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "4% yield + options = excellent income"
+        }
+      }
+    },
+    {
+      "ticker": "MRK",
+      "symbol": "MRK",
+      "exchange_symbol": "MRK",
+      "name": "Merck & Co.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:MRK",
+      "backtest_ticker": "NYSE:MRK",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "MRK",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Healthcare",
+        "Market Cap": "$280B",
+        "Approx Price": "~$110",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (20-28)",
+        "Risk Level": "Low",
+        "Notes": "Keytruda pipeline; stable dividend payer"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "PFE",
+      "symbol": "PFE",
+      "exchange_symbol": "PFE",
+      "name": "Pfizer Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:PFE",
+      "backtest_ticker": "NYSE:PFE",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "PFE",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Healthcare",
+        "Market Cap": "$150B",
+        "Approx Price": "~$27",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-38)",
+        "Risk Level": "Moderate",
+        "Notes": "High yield ~6%; mean reversion candidate"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "HD",
+      "symbol": "HD",
+      "exchange_symbol": "HD",
+      "name": "Home Depot",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:HD",
+      "backtest_ticker": "NYSE:HD",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "HD",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Disc.",
+        "Market Cap": "$330B",
+        "Approx Price": "~$330",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (20-26)",
+        "Risk Level": "Low",
+        "Notes": "Consumer cyclical leader; strong DGI"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "NKE",
+      "symbol": "NKE",
+      "exchange_symbol": "NKE",
+      "name": "Nike Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:NKE",
+      "backtest_ticker": "NYSE:NKE",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "NKE",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Disc.",
+        "Market Cap": "$110B",
+        "Approx Price": "~$72",
+        "Strategy Fit": "CC · CSP · MR",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-38)",
+        "Risk Level": "Moderate",
+        "Notes": "Mean reversion plays; brand recovery"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "SBUX",
+      "symbol": "SBUX",
+      "exchange_symbol": "SBUX",
+      "name": "Starbucks Corp.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:SBUX",
+      "backtest_ticker": "NASDAQ:SBUX",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "SBUX",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Disc.",
+        "Market Cap": "$90B",
+        "Approx Price": "~$80",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-36)",
+        "Risk Level": "Moderate",
+        "Notes": "Dividend + turnaround; oversold bounces"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "MCD",
+      "symbol": "MCD",
+      "exchange_symbol": "MCD",
+      "name": "McDonald's Corp.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:MCD",
+      "backtest_ticker": "NYSE:MCD",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "MCD",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Staples",
+        "Market Cap": "$200B",
+        "Approx Price": "~$285",
+        "Strategy Fit": "CC · DGI · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (18-24)",
+        "Risk Level": "Low",
+        "Notes": "Dividend Aristocrat; defensive income"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "KO",
+      "symbol": "KO",
+      "exchange_symbol": "KO",
+      "name": "Coca-Cola Co.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:KO",
+      "backtest_ticker": "NYSE:KO",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "KO",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Staples",
+        "Market Cap": "$260B",
+        "Approx Price": "~$60",
+        "Strategy Fit": "CC · DGI",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (15-20)",
+        "Risk Level": "Very Low",
+        "Notes": "Dividend King; ultra-stable for income"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "PG",
+      "symbol": "PG",
+      "exchange_symbol": "PG",
+      "name": "Procter & Gamble",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:PG",
+      "backtest_ticker": "NYSE:PG",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "PG",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Staples",
+        "Market Cap": "$370B",
+        "Approx Price": "~$160",
+        "Strategy Fit": "CC · DGI",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (15-20)",
+        "Risk Level": "Very Low",
+        "Notes": "Dividend King 67yr; defensive allocation"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "WMT",
+      "symbol": "WMT",
+      "exchange_symbol": "WMT",
+      "name": "Walmart Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:WMT",
+      "backtest_ticker": "NYSE:WMT",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "WMT",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Staples",
+        "Market Cap": "$590B",
+        "Approx Price": "~$68",
+        "Strategy Fit": "CC · DGI · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Low (18-24)",
+        "Risk Level": "Low",
+        "Notes": "Consumer staple + e-commerce momentum"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "AMD",
+      "symbol": "AMD",
+      "exchange_symbol": "AMD",
+      "name": "Advanced Micro Devices",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:AMD",
+      "backtest_ticker": "NASDAQ:AMD",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "AMD",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$240B",
+        "Approx Price": "~$148",
+        "Strategy Fit": "MC · CC · CSP",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "Very High (55-80)",
+        "Risk Level": "High",
+        "Notes": "High beta semiconductor; momentum ideal"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Semiconductors",
+          "IV Rank": "50-75",
+          "Avg Spread": "$0.02-0.06",
+          "Best Strategy": "CC · CSP · MC",
+          "Ideal DTE Range": "14-35 DTE",
+          "Ideal Delta": "0.25-0.30",
+          "Notes": "Very high IV; semi momentum"
+        }
+      }
+    },
+    {
+      "ticker": "CRM",
+      "symbol": "CRM",
+      "exchange_symbol": "CRM",
+      "name": "Salesforce Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:CRM",
+      "backtest_ticker": "NYSE:CRM",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "CRM",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$270B",
+        "Approx Price": "~$270",
+        "Strategy Fit": "CC · MC · IC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (30-42)",
+        "Risk Level": "Moderate",
+        "Notes": "Cloud leader; earnings-driven moves"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "NOW",
+      "symbol": "NOW",
+      "exchange_symbol": "NOW",
+      "name": "ServiceNow Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:NOW",
+      "backtest_ticker": "NYSE:NOW",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "NOW",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$165B",
+        "Approx Price": "~$810",
+        "Strategy Fit": "CC · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-38)",
+        "Risk Level": "Moderate",
+        "Notes": "High-growth SaaS; premium options"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "PLTR",
+      "symbol": "PLTR",
+      "exchange_symbol": "PLTR",
+      "name": "Palantir Technologies",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:PLTR",
+      "backtest_ticker": "NYSE:PLTR",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "PLTR",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$50B",
+        "Approx Price": "~$22",
+        "Strategy Fit": "MC · CC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Very High (60-90)",
+        "Risk Level": "High",
+        "Notes": "Meme-ish + AI narrative; high IV"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "AI/Defence",
+          "IV Rank": "55-90",
+          "Avg Spread": "$0.03-0.07",
+          "Best Strategy": "CC · MC",
+          "Ideal DTE Range": "14-30 DTE",
+          "Ideal Delta": "0.20-0.28",
+          "Notes": "AI hype keeps IV extreme; rich premiums"
+        }
+      }
+    },
+    {
+      "ticker": "SNOW",
+      "symbol": "SNOW",
+      "exchange_symbol": "SNOW",
+      "name": "Snowflake Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:SNOW",
+      "backtest_ticker": "NYSE:SNOW",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "SNOW",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$45B",
+        "Approx Price": "~$130",
+        "Strategy Fit": "MC · CC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "High (50-70)",
+        "Risk Level": "High",
+        "Notes": "Cloud data; volatile around earnings"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "MSTR",
+      "symbol": "MSTR",
+      "exchange_symbol": "MSTR",
+      "name": "MicroStrategy",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:MSTR",
+      "backtest_ticker": "NASDAQ:MSTR",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "MSTR",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$14B",
+        "Approx Price": "~$135",
+        "Strategy Fit": "MC · CC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Very High (80-120)",
+        "Risk Level": "Very High",
+        "Notes": "Bitcoin proxy; extreme volatility"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Bitcoin Proxy",
+          "IV Rank": "80-140",
+          "Avg Spread": "$0.10-0.25",
+          "Best Strategy": "CC · MC",
+          "Ideal DTE Range": "14-21 DTE",
+          "Ideal Delta": "0.15-0.22",
+          "Notes": "Bitcoin proxy; absurd IV; premium factory"
+        }
+      }
+    },
+    {
+      "ticker": "INTC",
+      "symbol": "INTC",
+      "exchange_symbol": "INTC",
+      "name": "Intel Corp.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:INTC",
+      "backtest_ticker": "NASDAQ:INTC",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "INTC",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$90B",
+        "Approx Price": "~$21",
+        "Strategy Fit": "CC · CSP · MR",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "High (40-60)",
+        "Risk Level": "High",
+        "Notes": "Turnaround; oversold bounces; high IV"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "QCOM",
+      "symbol": "QCOM",
+      "exchange_symbol": "QCOM",
+      "name": "Qualcomm Inc.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:QCOM",
+      "backtest_ticker": "NASDAQ:QCOM",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "QCOM",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$165B",
+        "Approx Price": "~$145",
+        "Strategy Fit": "CC · CSP · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-40)",
+        "Risk Level": "Moderate",
+        "Notes": "Semiconductor; dividend + options"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "CAT",
+      "symbol": "CAT",
+      "exchange_symbol": "CAT",
+      "name": "Caterpillar Inc.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:CAT",
+      "backtest_ticker": "NYSE:CAT",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "CAT",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Industrials",
+        "Market Cap": "$180B",
+        "Approx Price": "~$340",
+        "Strategy Fit": "CC · DGI · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (22-32)",
+        "Risk Level": "Low",
+        "Notes": "Dividend Aristocrat; cyclical strength"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "BA",
+      "symbol": "BA",
+      "exchange_symbol": "BA",
+      "name": "Boeing Co.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:BA",
+      "backtest_ticker": "NYSE:BA",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "BA",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Industrials",
+        "Market Cap": "$95B",
+        "Approx Price": "~$155",
+        "Strategy Fit": "MC · CC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "High (40-55)",
+        "Risk Level": "High",
+        "Notes": "Turnaround; high IV options play"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Industrials",
+          "IV Rank": "38-55",
+          "Avg Spread": "$0.04-0.08",
+          "Best Strategy": "CC · MC",
+          "Ideal DTE Range": "21-35 DTE",
+          "Ideal Delta": "0.25-0.30",
+          "Notes": "Turnaround stock; elevated IV"
+        }
+      }
+    },
+    {
+      "ticker": "GE",
+      "symbol": "GE",
+      "exchange_symbol": "GE",
+      "name": "GE Aerospace",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:GE",
+      "backtest_ticker": "NYSE:GE",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "GE",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Industrials",
+        "Market Cap": "$175B",
+        "Approx Price": "~$160",
+        "Strategy Fit": "MC · CC · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-38)",
+        "Risk Level": "Moderate",
+        "Notes": "Aerospace recovery; momentum"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "DE",
+      "symbol": "DE",
+      "exchange_symbol": "DE",
+      "name": "Deere & Company",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:DE",
+      "backtest_ticker": "NYSE:DE",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "DE",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Industrials",
+        "Market Cap": "$105B",
+        "Approx Price": "~$350",
+        "Strategy Fit": "CC · DGI · MC",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (24-32)",
+        "Risk Level": "Low",
+        "Notes": "AgTech leader; defensive dividend"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "NFLX",
+      "symbol": "NFLX",
+      "exchange_symbol": "NFLX",
+      "name": "Netflix Inc.",
+      "exchange": "NASDAQ",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NASDAQ:NFLX",
+      "backtest_ticker": "NASDAQ:NFLX",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "NFLX",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$255B",
+        "Approx Price": "~$600",
+        "Strategy Fit": "MC · CC · IC",
+        "Options Avail?": "✅ Excellent",
+        "IV Profile": "High (40-60)",
+        "Risk Level": "Med-High",
+        "Notes": "Strong momentum; rich options premiums"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Streaming",
+          "IV Rank": "38-60",
+          "Avg Spread": "$0.05-0.10",
+          "Best Strategy": "CC · IC",
+          "Ideal DTE Range": "21-35 DTE",
+          "Ideal Delta": "0.20-0.28",
+          "Notes": "Earnings volatility very high"
+        }
+      }
+    },
+    {
+      "ticker": "DIS",
+      "symbol": "DIS",
+      "exchange_symbol": "DIS",
+      "name": "Walt Disney Co.",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:DIS",
+      "backtest_ticker": "NYSE:DIS",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "DIS",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks"
+      ],
+      "also_seen_as": [],
+      "metadata": {
+        "Sector": "Consumer Disc.",
+        "Market Cap": "$170B",
+        "Approx Price": "~$95",
+        "Strategy Fit": "CC · CSP · MR",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (28-40)",
+        "Risk Level": "Moderate",
+        "Notes": "Mean reversion + turnaround play"
+      },
+      "metadata_by_sheet": {}
+    },
+    {
+      "ticker": "UBER",
+      "symbol": "UBER",
+      "exchange_symbol": "UBER",
+      "name": "Uber Technologies",
+      "exchange": "NYSE",
+      "country": "US",
+      "currency": "USD",
+      "asset_class": "us_equity",
+      "instrument_type": "stock",
+      "finnhub_symbol": "NYSE:UBER",
+      "backtest_ticker": "NYSE:UBER",
+      "ibkr_exchange": "SMART",
+      "yfinance_symbol": "UBER",
+      "exchange_source": "source_backtest_ticker",
+      "source_sheets": [
+        "US Stocks",
+        "US Options"
+      ],
+      "also_seen_as": [
+        "option_underlying"
+      ],
+      "metadata": {
+        "Sector": "Technology",
+        "Market Cap": "$135B",
+        "Approx Price": "~$65",
+        "Strategy Fit": "MC · CC · CSP",
+        "Options Avail?": "✅ Good",
+        "IV Profile": "Med (35-50)",
+        "Risk Level": "Moderate",
+        "Notes": "Momentum growth; profitable now"
+      },
+      "metadata_by_sheet": {
+        "US Options": {
+          "Category": "Tech/Rides",
+          "IV Rank": "35-50",
+          "Avg Spread": "$0.03-0.06",
+          "Best Strategy": "CC · CSP",
+          "Ideal DTE Range": "30-45 DTE",
+          "Ideal Delta": "0.25-0.35",
+          "Notes": "Growth + profitable; clean option chain"
+        }
+      }
+    }
+  ]
+}

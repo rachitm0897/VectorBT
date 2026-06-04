@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,28 @@ def save_artifact_json(run_id: str, artifact: dict[str, Any]) -> str:
     return _relative_artifact_path(path)
 
 
+def _artifact_id(artifact_path: str) -> str:
+    return Path(artifact_path).name
+
+
+def _artifact_url(artifact_path: str) -> str | None:
+    public_base_url = os.getenv("MCP_PUBLIC_BASE_URL", "").rstrip("/")
+    if not public_base_url:
+        return None
+    return f"{public_base_url}/artifacts/{_artifact_id(artifact_path)}"
+
+
+def _artifact_fields(artifact_path: str) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "artifact_path": artifact_path,
+        "artifact_id": _artifact_id(artifact_path),
+    }
+    url = _artifact_url(artifact_path)
+    if url:
+        fields["artifact_url"] = url
+    return fields
+
+
 def compact_backtest_response(
     run_id: str,
     symbol: str,
@@ -88,7 +111,7 @@ def compact_backtest_response(
         "lookback": lookback,
         "metrics": metrics,
         "data_quality": data_quality,
-        "artifact_path": artifact_path,
+        **_artifact_fields(artifact_path),
         "warnings": warnings,
     }
 
@@ -108,7 +131,7 @@ def compact_monte_carlo_response(
         "days": days,
         "simulations": simulations,
         "summary": summary,
-        "artifact_path": artifact_path,
+        **_artifact_fields(artifact_path),
     }
 
 
@@ -134,7 +157,7 @@ def compact_research_response(
             "candles_fetched": data_quality.get("candles_fetched"),
             "cache_status": data_quality.get("cache_status"),
         },
-        "artifact_path": artifact_path,
+        **_artifact_fields(artifact_path),
         "warnings": warnings,
     }
     if monte_carlo is not None:

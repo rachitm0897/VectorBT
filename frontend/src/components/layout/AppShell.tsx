@@ -17,7 +17,7 @@ export default function AppShell({ sidebar, children }: AppShellProps) {
             </p>
           </div>
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted">
-            <span className="border border-line bg-panel px-2 py-1">Backend localhost:8000</span>
+            <span className="border border-line bg-panel px-2 py-1">Backend API</span>
             <span className="border border-line bg-panel px-2 py-1">Dark Terminal</span>
           </div>
         </div>

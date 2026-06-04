@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { BacktestRequest, BacktestResult } from "../api/client";
+import type { BacktestRequest, BacktestResult, PortfolioOptimizationRequest } from "../api/client";
 import DrawdownUnderwaterChart from "./charts/DrawdownUnderwaterChart";
 import EquityBenchmarkChart from "./charts/EquityBenchmarkChart";
 import MonteCarloFanChart from "./charts/MonteCarloFanChart";
@@ -24,7 +24,7 @@ type ResultDashboardProps = {
   result: BacktestResult | null;
   isLoading: boolean;
   error: string | null;
-  parsedRequest?: BacktestRequest | Record<string, unknown> | null;
+  parsedRequest?: BacktestRequest | PortfolioOptimizationRequest | Record<string, unknown> | null;
   diagnostics?: Record<string, unknown> | null;
   usedChat?: boolean;
 };

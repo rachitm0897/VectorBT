@@ -8,14 +8,26 @@ type ChatPanelProps = {
 };
 
 const examples = [
-  "Backtest Apple",
-  "Backtest NVDA using RSI, buy below 30 and sell above 70",
-  "Run Tesla with 10/50 moving average crossover for 1 year and simulate 90 days",
-  "Test MSFT with Bollinger bands, window 20 and 2 standard deviations",
+  {
+    title: "Strategy backtest",
+    prompt: "Backtest AAPL using RSI. Buy below 30 and sell above 70. Run Monte Carlo for 60 days.",
+  },
+  {
+    title: "Symbol Markowitz",
+    prompt: "Optimize AAPL, MSFT, NVDA and GOOGL using Markowitz.",
+  },
+  {
+    title: "Technology Markowitz",
+    prompt: "Create a max Sharpe portfolio from Technology stocks using Markowitz.",
+  },
+  {
+    title: "Healthcare Min Vol",
+    prompt: "Find a minimum volatility portfolio from Healthcare stocks using Markowitz.",
+  },
 ];
 
 export default function ChatPanel({ isLoading, assistantMessage, error, onSend }: ChatPanelProps) {
-  const [message, setMessage] = useState(examples[0]);
+  const [message, setMessage] = useState(examples[0].prompt);
 
   return (
     <section className="panel-shell p-4">
@@ -53,14 +65,16 @@ export default function ChatPanel({ isLoading, assistantMessage, error, onSend }
       </form>
 
       <div className="mt-4 space-y-2">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Examples</div>
         {examples.map((example) => (
           <button
-            key={example}
+            key={example.title}
             className="block w-full border border-line bg-ink px-3 py-2 text-left text-xs leading-5 text-muted transition hover:border-cyan hover:text-text"
             type="button"
-            onClick={() => setMessage(example)}
+            onClick={() => setMessage(example.prompt)}
           >
-            {example}
+            <span className="mb-1 block font-semibold uppercase tracking-[0.12em] text-cyan">{example.title}</span>
+            {example.prompt}
           </button>
         ))}
       </div>

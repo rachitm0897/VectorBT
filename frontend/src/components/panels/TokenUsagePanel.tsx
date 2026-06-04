@@ -4,11 +4,12 @@ import SectionCard from "../layout/SectionCard";
 type TokenUsagePanelProps = {
   diagnostics?: Record<string, unknown> | null;
   usedChat?: boolean;
+  variant?: "card" | "plain";
 };
 
-function TokenUsagePanel({ diagnostics, usedChat }: TokenUsagePanelProps) {
-  return (
-    <SectionCard title="Token / Cache" subtitle="Parser-only AI budget">
+function TokenUsagePanel({ diagnostics, usedChat, variant = "card" }: TokenUsagePanelProps) {
+  const body = (
+    <>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <TokenMetric label="LLM Calls" value={diagnostics?.llm_calls ?? (usedChat ? "0-1" : 0)} />
         <TokenMetric label="Parser Cache" value={diagnostics?.parser_cache ?? "unknown"} />
@@ -19,6 +20,16 @@ function TokenUsagePanel({ diagnostics, usedChat }: TokenUsagePanelProps) {
         Chat uses one parser call on cache miss. Response narration is a Python template; market data and backtest arrays stay
         out of the LLM context.
       </p>
+    </>
+  );
+
+  if (variant === "plain") {
+    return body;
+  }
+
+  return (
+    <SectionCard title="Token / Cache" subtitle="Parser-only AI budget">
+      {body}
     </SectionCard>
   );
 }

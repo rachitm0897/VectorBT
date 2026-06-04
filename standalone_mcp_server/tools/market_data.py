@@ -108,10 +108,15 @@ def fetch_finnhub_candles_with_metadata(
     symbol: str,
     lookback: str = "2y",
     resolution: str = "D",
+    api_key: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     normalized_symbol = normalize_symbol(symbol)
     if resolution != "D":
         raise ValueError("Only daily resolution 'D' is supported by this prototype.")
+
+    api_key = (api_key or os.getenv("FINNHUB_API_KEY") or "").strip()
+    if not api_key:
+        raise ValueError("Finnhub API key is required.")
 
     start_ts, end_ts = _timestamp_range(lookback)
     path = _cache_path(normalized_symbol, resolution, start_ts, end_ts)
@@ -119,10 +124,6 @@ def fetch_finnhub_candles_with_metadata(
     if cached:
         df = _payload_to_frame(cached["payload"])
         return df, _metadata(normalized_symbol, resolution, lookback, df, "HIT")
-
-    api_key = os.getenv("FINNHUB_API_KEY")
-    if not api_key:
-        raise ValueError("FINNHUB_API_KEY is not configured.")
 
     try:
         response = requests.get(
@@ -164,6 +165,12 @@ def fetch_finnhub_candles(
     symbol: str,
     lookback: str = "2y",
     resolution: str = "D",
+    api_key: str | None = None,
 ) -> pd.DataFrame:
-    df, _ = fetch_finnhub_candles_with_metadata(symbol, lookback=lookback, resolution=resolution)
+    df, _ = fetch_finnhub_candles_with_metadata(
+        symbol,
+        lookback=lookback,
+        resolution=resolution,
+        api_key=api_key,
+    )
     return df

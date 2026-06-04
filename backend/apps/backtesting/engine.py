@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import vectorbt as vbt
+from django.conf import settings
 
 from apps.market_data.finnhub import MarketDataError, fetch_daily_ohlcv
 from apps.market_data.symbols import normalize_symbol
@@ -18,10 +19,43 @@ class BacktestExecutionError(Exception):
         super().__init__(message)
 
 
-def run_backtest(validated_request: dict) -> dict:
+def run_backtest(validated_request: dict, finnhub_api_key: str | None = None) -> dict:
+    if settings.MCP_ENABLED:
+        from apps.backtesting.mcp_client import MCPClientError, run_remote_backtest
+
+        try:
+            return run_remote_backtest(validated_request, finnhub_api_key=finnhub_api_key)
+        except MCPClientError as exc:
+            raise BacktestExecutionError(exc.code, str(exc)) from exc
+
+    return run_local_backtest(validated_request, finnhub_api_key=finnhub_api_key)
+
+
+def run_portfolio_optimization(validated_request: dict, finnhub_api_key: str | None = None) -> dict:
+    if not settings.MCP_ENABLED:
+        raise BacktestExecutionError(
+            "mcp_disabled",
+            "Portfolio optimization requires the MCP server.",
+        )
+
+    from apps.backtesting.mcp_client import MCPClientError, run_remote_portfolio_optimization
+
+    try:
+        return run_remote_portfolio_optimization(validated_request, finnhub_api_key=finnhub_api_key)
+    except MCPClientError as exc:
+        raise BacktestExecutionError(exc.code, str(exc)) from exc
+
+
+def run_local_backtest(validated_request: dict, finnhub_api_key: str | None = None) -> dict:
     symbol = normalize_symbol(validated_request["symbol"])
     start_ts, end_ts = _lookback_to_timestamps(validated_request.get("lookback", "2y"))
-    frame = fetch_daily_ohlcv(symbol, validated_request.get("resolution", "D"), start_ts, end_ts)
+    frame = fetch_daily_ohlcv(
+        symbol,
+        validated_request.get("resolution", "D"),
+        start_ts,
+        end_ts,
+        api_key=finnhub_api_key,
+    )
 
     close = _close_series(frame)
     strategy_result = build_strategy_signals(

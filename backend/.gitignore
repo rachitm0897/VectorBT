@@ -14,7 +14,9 @@ db.sqlite3
 *.sqlite3
 *.db
 cache/market_data/*.json
+!cache/market_data/.gitkeep
 cache/parsed_requests/*.json
+!cache/parsed_requests/.gitkeep
 logs/
 *.log
 staticfiles/
