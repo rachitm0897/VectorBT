@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from django.urls import include, path
 
+from apps.analytics.views import AnalyticsStatusAPIView
 from apps.agent.views import ChatAPIView
 from apps.backtesting.views import (
     BacktestAPIView,
@@ -17,6 +18,7 @@ def health_live(_request):
 
 api_patterns = [
     path("health/live/", health_live, name="health-live"),
+    path("analytics/status/", AnalyticsStatusAPIView.as_view(), name="analytics-status"),
     path("mcp/status/", MCPStatusAPIView.as_view(), name="mcp-status"),
     path("backtest/", BacktestAPIView.as_view(), name="backtest"),
     path("portfolio/optimize/", PortfolioOptimizeAPIView.as_view(), name="portfolio-optimize"),

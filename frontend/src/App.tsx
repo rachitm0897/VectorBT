@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_URL,
+  METABASE_URL,
+  getAnalyticsStatus,
   getMcpStatus,
   runBacktest,
   runChat,
   runPortfolioOptimization,
   type ApiKeys,
+  type AnalyticsStatus,
   type BacktestRequest,
   type BacktestResult,
   type MCPStatus,
@@ -21,6 +24,7 @@ import PortfolioOptimizerPanel from "./components/PortfolioOptimizerPanel";
 import AppShell from "./components/layout/AppShell";
 import CollapsiblePanel from "./components/layout/CollapsiblePanel";
 import Sidebar from "./components/layout/Sidebar";
+import AnalyticsStatusPanel from "./components/panels/AnalyticsStatusPanel";
 import McpStatusPanel from "./components/panels/McpStatusPanel";
 import ParsedRequestPanel from "./components/panels/ParsedRequestPanel";
 import TokenUsagePanel from "./components/panels/TokenUsagePanel";
@@ -63,6 +67,9 @@ export default function App() {
   const [mcpStatus, setMcpStatus] = useState<MCPStatus | null>(null);
   const [mcpStatusError, setMcpStatusError] = useState<string | null>(null);
   const [isMcpStatusLoading, setIsMcpStatusLoading] = useState(false);
+  const [analyticsStatus, setAnalyticsStatus] = useState<AnalyticsStatus | null>(null);
+  const [analyticsStatusError, setAnalyticsStatusError] = useState<string | null>(null);
+  const [isAnalyticsStatusLoading, setIsAnalyticsStatusLoading] = useState(false);
 
   const parseError = useMemo(() => {
     try {
@@ -86,6 +93,14 @@ export default function App() {
     return mcpStatus.connected ? "Connected" : "Offline";
   }, [isMcpStatusLoading, mcpStatus, mcpStatusError]);
 
+  const analyticsSummary = useMemo(() => {
+    if (isAnalyticsStatusLoading) return "Checking";
+    if (analyticsStatusError) return "Error";
+    if (!analyticsStatus) return "Unknown";
+    if (!analyticsStatus.enabled) return "Disabled";
+    return analyticsStatus.connected ? "Connected" : "Offline";
+  }, [analyticsStatus, analyticsStatusError, isAnalyticsStatusLoading]);
+
   const shouldOpenConfig = !apiKeys.chatApiKey.trim() || !apiKeys.finnhubApiKey.trim();
 
   function handleStrategyChange(nextStrategy: StrategyName) {
@@ -106,9 +121,23 @@ export default function App() {
     }
   }, []);
 
+  const refreshAnalyticsStatus = useCallback(async () => {
+    setIsAnalyticsStatusLoading(true);
+    setAnalyticsStatusError(null);
+    try {
+      const response = await getAnalyticsStatus();
+      setAnalyticsStatus(response);
+    } catch (error) {
+      setAnalyticsStatusError(error instanceof Error ? error.message : "Analytics status check failed.");
+    } finally {
+      setIsAnalyticsStatusLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void refreshMcpStatus();
-  }, [refreshMcpStatus]);
+    void refreshAnalyticsStatus();
+  }, [refreshAnalyticsStatus, refreshMcpStatus]);
 
   async function handleSubmit() {
     setActiveWorkflow("backtest");
@@ -144,6 +173,7 @@ export default function App() {
       setUsedChat(false);
       setAssistantMessage(null);
       void refreshMcpStatus();
+      void refreshAnalyticsStatus();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Backtest failed.");
     } finally {
@@ -191,6 +221,7 @@ export default function App() {
         setActiveWorkflow("backtest");
       }
       void refreshMcpStatus();
+      void refreshAnalyticsStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Chat request failed.";
       setChatError(message);
@@ -220,6 +251,7 @@ export default function App() {
       setUsedChat(false);
       setAssistantMessage(response.assistant_message || null);
       void refreshMcpStatus();
+      void refreshAnalyticsStatus();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Portfolio optimization failed.");
     } finally {
@@ -276,6 +308,16 @@ export default function App() {
               diagnostics={diagnostics || result?.diagnostics || null}
               result={result}
               onRefresh={refreshMcpStatus}
+            />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Analytics" defaultOpen={false} summary={analyticsSummary}>
+            <AnalyticsStatusPanel
+              status={analyticsStatus}
+              isLoading={isAnalyticsStatusLoading}
+              error={analyticsStatusError}
+              metabaseUrl={METABASE_URL}
+              onRefresh={refreshAnalyticsStatus}
             />
           </CollapsiblePanel>
 

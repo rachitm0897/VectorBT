@@ -275,6 +275,7 @@ def run_backtest_node(state: AgentState) -> AgentState:
             result = run_portfolio_optimization(
                 state["validated_request"],
                 finnhub_api_key=state.get("finnhub_api_key"),
+                analytics_source="chat",
             )
             return {
                 **state,
@@ -284,7 +285,11 @@ def run_backtest_node(state: AgentState) -> AgentState:
                 "warnings": [*state.get("warnings", []), *(result.get("warnings") or [])],
             }
 
-        result = run_backtest(state["validated_request"], finnhub_api_key=state.get("finnhub_api_key"))
+        result = run_backtest(
+            state["validated_request"],
+            finnhub_api_key=state.get("finnhub_api_key"),
+            analytics_source="chat",
+        )
     except MarketDataError as exc:
         return {**state, "status": "error", "errors": [exc.code], "assistant_message": str(exc)}
     except StrategyValidationError as exc:

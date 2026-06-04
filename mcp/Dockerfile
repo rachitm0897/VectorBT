@@ -25,6 +25,6 @@ COPY us_stocks_only_universe.json ./
 
 RUN pip install --no-cache-dir .
 
-EXPOSE 8000
+EXPOSE 8000 8001
 
 CMD ["python", "server.py"]

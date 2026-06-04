@@ -1,83 +1,46 @@
 services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-vectorbt-sandbox-dev-key}
-      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
-      ANALYTICS_DB_NAME: ${ANALYTICS_DB_NAME:-analytics}
-      ANALYTICS_DB_USER: ${ANALYTICS_DB_USER:-analytics_user}
-      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD:-analytics_password}
-      ANALYTICS_DB_HOST: ${ANALYTICS_DB_HOST:-analytics_db}
-      ANALYTICS_DB_PORT: ${ANALYTICS_DB_PORT:-5432}
-      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-true}
-      METABASE_URL: ${METABASE_URL:-http://localhost:3000}
-      MCP_ENABLED: ${MCP_ENABLED:-true}
-      MCP_TRANSPORT: ${MCP_TRANSPORT:-stdio}
-      MCP_SERVER_COMMAND: ${MCP_SERVER_COMMAND:-python}
-      MCP_SERVER_ARGS: ${MCP_SERVER_ARGS:-/standalone_mcp_server/server.py}
-      MCP_CALL_TIMEOUT_SECONDS: ${MCP_CALL_TIMEOUT_SECONDS:-120}
-      MCP_DEFAULT_TOOL: ${MCP_DEFAULT_TOOL:-run_strategy_research}
-    volumes:
-      - ./backend:/app
-      - ./standalone_mcp_server:/standalone_mcp_server
-  frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
-    environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/index.html:/app/index.html
-      - ./frontend/postcss.config.js:/app/postcss.config.js
-      - ./frontend/tailwind.config.js:/app/tailwind.config.js
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./frontend/tsconfig.node.json:/app/tsconfig.node.json
-      - ./frontend/vite.config.ts:/app/vite.config.ts
-    depends_on:
-      - backend
   analytics_db:
     image: postgres:16-alpine
-    container_name: vectortb_analytics_db
+    container_name: insta_analytics_db
     environment:
-      POSTGRES_DB: ${ANALYTICS_DB_NAME:-analytics}
-      POSTGRES_USER: ${ANALYTICS_DB_USER:-analytics_user}
-      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASSWORD:-analytics_password}
-    expose:
-      - "5432"
+      POSTGRES_DB: ${POSTGRES_ANALYTICS_DB:-analytics}
+      POSTGRES_USER: ${POSTGRES_ANALYTICS_WRITER_USER:-analytics_writer}
+      POSTGRES_PASSWORD: ${POSTGRES_ANALYTICS_WRITER_PASSWORD:-analytics_writer_password}
     ports:
-      - "5433:5432"
+      - "${ANALYTICS_DB_PORT:-5433}:5432"
     volumes:
       - analytics_db_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-analytics.sql:/docker-entrypoint-initdb.d/init-analytics.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    networks:
+      - insta_local
+
   metabase_db:
     image: postgres:16-alpine
-    container_name: vectortb_metabase_db
+    container_name: insta_metabase_db
     environment:
-      POSTGRES_DB: metabase
-      POSTGRES_USER: metabase_user
-      POSTGRES_PASSWORD: metabase_password
+      POSTGRES_DB: ${POSTGRES_METABASE_DB:-metabase}
+      POSTGRES_USER: ${POSTGRES_METABASE_USER:-metabase_user}
+      POSTGRES_PASSWORD: ${POSTGRES_METABASE_PASSWORD:-metabase_password}
     volumes:
       - metabase_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    networks:
+      - insta_local
+
   metabase:
     image: metabase/metabase:latest
-    container_name: vectortb_metabase
+    container_name: insta_metabase
     ports:
-      - "3000:3000"
+      - "${METABASE_PORT:-3000}:3000"
     depends_on:
       metabase_db:
         condition: service_healthy
@@ -85,12 +48,101 @@ services:
         condition: service_healthy
     environment:
       MB_DB_TYPE: postgres
-      MB_DB_DBNAME: metabase
+      MB_DB_DBNAME: ${POSTGRES_METABASE_DB:-metabase}
       MB_DB_PORT: 5432
-      MB_DB_USER: metabase_user
-      MB_DB_PASS: metabase_password
+      MB_DB_USER: ${POSTGRES_METABASE_USER:-metabase_user}
+      MB_DB_PASS: ${POSTGRES_METABASE_PASSWORD:-metabase_password}
       MB_DB_HOST: metabase_db
+    networks:
+      - insta_local
+
+  mcp:
+    build: ./mcp
+    container_name: insta_mcp_server
+    ports:
+      - "${MCP_PORT:-8001}:8001"
+    environment:
+      MCP_SERVER_HOST: 0.0.0.0
+      MCP_SERVER_PORT: 8001
+      MCP_TRANSPORT: streamable_http
+      MCP_BASE_PATH: /mcp
+      MCP_PUBLIC_BASE_URL: http://localhost:8001
+      MCP_CACHE_DIR: /app/cache
+      FINNHUB_API_KEY: ""
+    volumes:
+      - mcp_cache:/app/cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - insta_local
+
+  backend:
+    build: ./backend
+    container_name: insta_backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      analytics_db:
+        condition: service_healthy
+      mcp:
+        condition: service_healthy
+    environment:
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:5173,http://frontend:5173
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:5173
+      PUBLIC_BACKEND_BASE_URL: http://localhost:8000
+      APP_BASE_PATH: /
+      MCP_ENABLED: "true"
+      MCP_TRANSPORT: streamable_http
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://mcp:8001/mcp}
+      MCP_CALL_TIMEOUT_SECONDS: 120
+      MCP_DEFAULT_TOOL: run_strategy_research
+      DEFAULT_CHAT_URL: ${DEFAULT_CHAT_URL:-https://api.openai.com/v1}
+      DEFAULT_CHAT_MODEL: ${DEFAULT_CHAT_MODEL:-gpt-4o-mini}
+      ANALYTICS_ENABLED: "true"
+      ANALYTICS_DB_NAME: ${POSTGRES_ANALYTICS_DB:-analytics}
+      ANALYTICS_DB_USER: ${POSTGRES_ANALYTICS_WRITER_USER:-analytics_writer}
+      ANALYTICS_DB_PASSWORD: ${POSTGRES_ANALYTICS_WRITER_PASSWORD:-analytics_writer_password}
+      ANALYTICS_DB_HOST: analytics_db
+      ANALYTICS_DB_PORT: 5432
+      METABASE_URL: ${METABASE_URL:-http://localhost:3000}
+      OPENAI_API_KEY: ""
+      FINNHUB_API_KEY: ""
+    command: python manage.py runserver 0.0.0.0:8000 --noreload
+    networks:
+      - insta_local
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    container_name: insta_frontend
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_MCP_STATUS_PATH: /api/mcp/status/
+      VITE_DEFAULT_CHAT_URL: ${DEFAULT_CHAT_URL:-https://api.openai.com/v1}
+      VITE_DEFAULT_MODEL: ${DEFAULT_CHAT_MODEL:-gpt-4o-mini}
+      VITE_METABASE_URL: ${METABASE_URL:-http://localhost:3000}
+      VITE_FRONTEND_BASE: /
+      VITE_DEV_PORT: 5173
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - insta_local
 
 volumes:
   analytics_db_data:
   metabase_db_data:
+  mcp_cache:
+
+networks:
+  insta_local:
+    driver: bridge

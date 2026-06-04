@@ -1,5 +1,6 @@
 export const DEFAULT_CHAT_URL = normalizeDefault("VITE_DEFAULT_CHAT_URL", "https://api.openai.com/v1");
 export const DEFAULT_CHAT_MODEL = normalizeDefault("VITE_DEFAULT_MODEL", "gpt-4o-mini");
+export const METABASE_URL = normalizeUrl(import.meta.env.VITE_METABASE_URL, "http://localhost:3000");
 
 export type StrategyName = "sma_crossover" | "rsi_mean_reversion" | "bollinger_reversion";
 
@@ -229,6 +230,15 @@ export type MCPStatus = {
   error: string | null;
 };
 
+export type AnalyticsStatus = {
+  enabled: boolean;
+  connected: boolean;
+  database: string;
+  host: string;
+  metabase_url: string;
+  error: string | null;
+};
+
 const DEFAULT_API_BASE_URL = import.meta.env.PROD ? "https://qfsplatform.com/insta_backtester" : "http://localhost:8000/api";
 
 function normalizeApiBaseUrl(value: string | undefined): string {
@@ -256,6 +266,11 @@ function normalizeDefault(envName: "VITE_DEFAULT_CHAT_URL" | "VITE_DEFAULT_MODEL
   const rawValue = envName === "VITE_DEFAULT_CHAT_URL" ? import.meta.env.VITE_DEFAULT_CHAT_URL : import.meta.env.VITE_DEFAULT_MODEL;
   const value = String(rawValue || fallback).trim();
   return value || fallback;
+}
+
+function normalizeUrl(value: string | undefined, fallback: string): string {
+  const normalized = String(value || fallback).trim().replace(/\/+$/g, "");
+  return normalized || fallback;
 }
 
 function buildApiUrl(path: string): string {
@@ -448,6 +463,19 @@ export async function getMcpStatus(): Promise<MCPStatus> {
   const data = (await response.json()) as MCPStatus;
   if (!response.ok) {
     throw new Error(data?.error || "MCP status request failed.");
+  }
+  return data;
+}
+
+export async function getAnalyticsStatus(): Promise<AnalyticsStatus> {
+  const response = await fetch(buildApiUrl("/analytics/status/"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const data = (await response.json()) as AnalyticsStatus;
+  if (!response.ok) {
+    throw new Error(data?.error || "Analytics status request failed.");
   }
   return data;
 }

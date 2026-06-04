@@ -11,6 +11,7 @@ from django.conf import settings
 from apps.market_data.finnhub import MarketDataError, fetch_daily_ohlcv
 from apps.market_data.symbols import normalize_symbol
 from apps.strategies.registry import StrategyValidationError, build_strategy_signals
+from apps.analytics.services import persist_backtest_result, persist_portfolio_optimization_result
 
 
 class BacktestExecutionError(Exception):
@@ -19,19 +20,33 @@ class BacktestExecutionError(Exception):
         super().__init__(message)
 
 
-def run_backtest(validated_request: dict, finnhub_api_key: str | None = None) -> dict:
+def run_backtest(
+    validated_request: dict,
+    finnhub_api_key: str | None = None,
+    analytics_source: str = "api",
+) -> dict:
     if settings.MCP_ENABLED:
         from apps.backtesting.mcp_client import MCPClientError, run_remote_backtest
 
         try:
-            return run_remote_backtest(validated_request, finnhub_api_key=finnhub_api_key)
+            result = run_remote_backtest(validated_request, finnhub_api_key=finnhub_api_key)
         except MCPClientError as exc:
             raise BacktestExecutionError(exc.code, str(exc)) from exc
+    else:
+        result = run_local_backtest(validated_request, finnhub_api_key=finnhub_api_key)
 
-    return run_local_backtest(validated_request, finnhub_api_key=finnhub_api_key)
+    if result.get("status") == "success":
+        analytics_result = dict(result)
+        analytics_result["_analytics_request"] = dict(validated_request)
+        persist_backtest_result(analytics_result, source=analytics_source)
+    return result
 
 
-def run_portfolio_optimization(validated_request: dict, finnhub_api_key: str | None = None) -> dict:
+def run_portfolio_optimization(
+    validated_request: dict,
+    finnhub_api_key: str | None = None,
+    analytics_source: str = "api",
+) -> dict:
     if not settings.MCP_ENABLED:
         raise BacktestExecutionError(
             "mcp_disabled",
@@ -41,9 +56,15 @@ def run_portfolio_optimization(validated_request: dict, finnhub_api_key: str | N
     from apps.backtesting.mcp_client import MCPClientError, run_remote_portfolio_optimization
 
     try:
-        return run_remote_portfolio_optimization(validated_request, finnhub_api_key=finnhub_api_key)
+        result = run_remote_portfolio_optimization(validated_request, finnhub_api_key=finnhub_api_key)
     except MCPClientError as exc:
         raise BacktestExecutionError(exc.code, str(exc)) from exc
+
+    if result.get("status") == "success":
+        analytics_result = dict(result)
+        analytics_result["_analytics_request"] = dict(validated_request)
+        persist_portfolio_optimization_result(analytics_result, source=analytics_source)
+    return result
 
 
 def run_local_backtest(validated_request: dict, finnhub_api_key: str | None = None) -> dict:

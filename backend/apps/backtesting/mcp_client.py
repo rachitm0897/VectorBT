@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from datetime import timedelta
 from typing import Any, Awaitable, Callable
 
 import requests
 from django.conf import settings
+
+from apps.analytics.services import persist_mcp_tool_call
 
 
 class MCPClientError(Exception):
@@ -144,6 +147,7 @@ def fetch_remote_stocks_by_sector(sector: str | None = None) -> dict[str, Any]:
 
 def call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     _ensure_tool_allowed(tool_name)
+    started = time.perf_counter()
 
     async def operation(session: Any) -> dict[str, Any]:
         result = await session.call_tool(
@@ -158,7 +162,23 @@ def call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             raise MCPClientError(str(errors[0]), message)
         return _decode_tool_result(result)
 
-    return _run_async(_with_session(operation))
+    try:
+        compact = _run_async(_with_session(operation))
+    except Exception as exc:
+        persist_mcp_tool_call(_mcp_tool_event(tool_name, arguments, started, "error", str(exc)))
+        raise
+
+    event_status = "error" if compact.get("status") == "error" else "success"
+    persist_mcp_tool_call(
+        _mcp_tool_event(
+            tool_name,
+            arguments,
+            started,
+            event_status,
+            compact.get("message") if event_status == "error" else None,
+        )
+    )
+    return compact
 
 
 def _raise_for_tool_error(compact: dict[str, Any]) -> None:
@@ -322,20 +342,40 @@ def _portfolio_backend_response(compact: dict[str, Any], arguments: dict[str, An
 
 
 def _load_artifact(compact: dict[str, Any], warnings: list[str]) -> dict[str, Any] | None:
-    artifact_url = compact.get("artifact_url")
-    if artifact_url:
+    for artifact_url in _artifact_urls(compact):
         try:
             response = requests.get(str(artifact_url), timeout=min(float(settings.MCP_CALL_TIMEOUT_SECONDS), 30.0))
             response.raise_for_status()
             data = response.json()
             return data if isinstance(data, dict) else None
         except Exception:
-            warnings.append("Remote MCP artifact could not be loaded; showing compact summary.")
-            return None
+            continue
 
     if compact.get("artifact_path"):
         warnings.append("Remote MCP artifact was not accessible from backend.")
     return None
+
+
+def _artifact_urls(compact: dict[str, Any]) -> list[str]:
+    urls: list[str] = []
+    public_url = compact.get("artifact_url")
+    if public_url:
+        urls.append(str(public_url))
+
+    artifact_id = compact.get("artifact_id")
+    if artifact_id and settings.MCP_SERVER_URL:
+        base_url = settings.MCP_SERVER_URL.rstrip("/")
+        for suffix in ("/mcp", "/sse"):
+            if base_url.endswith(suffix):
+                base_url = base_url[: -len(suffix)]
+                break
+        urls.append(f"{base_url}/artifacts/{artifact_id}")
+
+    deduped: list[str] = []
+    for url in urls:
+        if url not in deduped:
+            deduped.append(url)
+    return deduped
 
 
 def _artifact_list(
@@ -380,6 +420,37 @@ def _decode_tool_result(result: Any) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {"status": "success", "content": text}
     return data if isinstance(data, dict) else {"status": "success", "content": data}
+
+
+def _mcp_tool_event(
+    tool_name: str,
+    arguments: dict[str, Any],
+    started: float,
+    status: str,
+    error_message: str | None = None,
+) -> dict[str, Any]:
+    symbols = arguments.get("symbols")
+    return {
+        "tool_name": tool_name,
+        "transport": _public_transport(settings.MCP_TRANSPORT),
+        "server_url": settings.MCP_SERVER_URL,
+        "status": status,
+        "runtime_ms": int((time.perf_counter() - started) * 1000),
+        "error_message": error_message,
+        "request_type": _request_type_for_tool(tool_name),
+        "symbol": arguments.get("symbol"),
+        "strategy": arguments.get("strategy"),
+        "sector": arguments.get("sector"),
+        "symbols_count": len(symbols) if isinstance(symbols, list) else None,
+    }
+
+
+def _request_type_for_tool(tool_name: str) -> str | None:
+    if tool_name == "run_markowitz_optimization":
+        return "portfolio_optimization"
+    if tool_name in {"run_strategy_research", "run_strategy_backtest"}:
+        return "strategy_backtest"
+    return None
 
 
 def _normalize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:

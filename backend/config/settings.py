@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "apps.strategies",
     "apps.backtesting",
     "apps.agent",
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [
@@ -106,3 +107,11 @@ MCP_ALLOWED_TOOLS = set(
         "run_strategy_research,run_markowitz_optimization,list_stock_universe,list_sectors,list_stocks_by_sector,resolve_symbols_for_sector",
     )
 )
+
+ANALYTICS_ENABLED = os.getenv("ANALYTICS_ENABLED", "false").lower() == "true"
+ANALYTICS_DB_NAME = os.getenv("ANALYTICS_DB_NAME", "analytics")
+ANALYTICS_DB_USER = os.getenv("ANALYTICS_DB_USER", "analytics_writer")
+ANALYTICS_DB_PASSWORD = os.getenv("ANALYTICS_DB_PASSWORD", "analytics_writer_password")
+ANALYTICS_DB_HOST = os.getenv("ANALYTICS_DB_HOST", "localhost")
+ANALYTICS_DB_PORT = int(os.getenv("ANALYTICS_DB_PORT", "5432"))
+METABASE_URL = os.getenv("METABASE_URL", "http://localhost:3000")
