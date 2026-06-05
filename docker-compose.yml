@@ -68,6 +68,9 @@ services:
       MCP_BASE_PATH: /mcp
       MCP_PUBLIC_BASE_URL: http://localhost:8001
       MCP_CACHE_DIR: /app/cache
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-finance-mcp-dev}
       FINNHUB_API_KEY: ""
     volumes:
       - mcp_cache:/app/cache
@@ -102,6 +105,9 @@ services:
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://mcp:8001/mcp}
       MCP_CALL_TIMEOUT_SECONDS: 120
       MCP_DEFAULT_TOOL: run_strategy_research
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-finance-mcp-dev}
       DEFAULT_CHAT_URL: ${DEFAULT_CHAT_URL:-https://api.openai.com/v1}
       DEFAULT_CHAT_MODEL: ${DEFAULT_CHAT_MODEL:-gpt-4o-mini}
       ANALYTICS_ENABLED: "true"

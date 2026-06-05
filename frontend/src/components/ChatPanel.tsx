@@ -9,6 +9,10 @@ type ChatPanelProps = {
 
 const examples = [
   {
+    title: "MACD crossover",
+    prompt: "Backtest AAPL using MACD. Enter when MACD crosses above the signal line and exit when it crosses below.",
+  },
+  {
     title: "Strategy backtest",
     prompt: "Backtest AAPL using RSI. Buy below 30 and sell above 70. Run Monte Carlo for 60 days.",
   },

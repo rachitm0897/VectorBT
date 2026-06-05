@@ -13,6 +13,8 @@ ENV MCP_TRANSPORT=streamable_http
 ENV MCP_SERVER_URL=https://qfsplatform.com/insta_backtest_MCP_server/mcp
 ENV MCP_CALL_TIMEOUT_SECONDS=120
 ENV MCP_DEFAULT_TOOL=run_strategy_research
+ENV LANGSMITH_TRACING=false
+ENV LANGSMITH_PROJECT=finance-mcp-dev
 
 WORKDIR /app
 

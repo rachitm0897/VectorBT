@@ -6,7 +6,7 @@ from typing import Any
 from django.conf import settings
 
 
-CACHE_VERSION = "v1"
+CACHE_VERSION = "v3"
 
 
 def message_cache_key(message: str) -> str:

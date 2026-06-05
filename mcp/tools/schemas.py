@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-StrategyName = Literal["sma_crossover", "rsi_mean_reversion", "bollinger_reversion"]
+StrategyName = str
 Lookback = Literal["1mo", "6mo", "1y", "2y", "5y"]
 Resolution = Literal["D"]
 MonteCarloMethod = Literal["bootstrap"]
@@ -32,6 +32,21 @@ class StrategyBacktestRequest(MarketDataRequest):
     parameters: dict[str, Any] = Field(default_factory=dict)
     initial_cash: float = Field(default_factory=_default_initial_cash, gt=0)
     fees: float = Field(default_factory=_default_fees, ge=0)
+
+
+class IndicatorRequest(MarketDataRequest):
+    indicator: str = Field(min_length=1)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class IndicatorSpec(BaseModel):
+    name: str = Field(min_length=1)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    alias: str | None = Field(default=None, min_length=1)
+
+
+class IndicatorBatchRequest(MarketDataRequest):
+    indicators: list[IndicatorSpec] = Field(min_length=1, max_length=50)
 
 
 class MonteCarloRequest(MarketDataRequest):

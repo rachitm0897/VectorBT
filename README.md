@@ -52,6 +52,44 @@ Inside Docker, the database host is `analytics_db`, not `localhost`.
 
 User-provided Chat URL, Chat API key, model, and Finnhub API key still flow from the frontend to the backend request path. They are not stored in PostgreSQL or Metabase.
 
+## LangSmith tracing
+
+LangSmith tracing shows the top-level chat request, LangGraph nodes, direct OpenAI parser calls, selected MCP tools, sanitized tool inputs, compact output summaries, errors, token usage, and latency. With the default `streamable_http` transport, trace headers are propagated from the backend to the MCP server so one request appears as a nested trace tree.
+
+Create a LangSmith API key, then set:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key_here
+LANGSMITH_PROJECT=finance-mcp-dev
+```
+
+Start the services and open the `finance-mcp-dev` project in LangSmith. Tracing remains disabled when `LANGSMITH_TRACING` is false or the API key is empty.
+
+Windows Miniforge or Command Prompt:
+
+```bat
+set LANGSMITH_TRACING=true
+set LANGSMITH_API_KEY=your_key_here
+set LANGSMITH_PROJECT=finance-mcp-dev
+```
+
+PowerShell:
+
+```powershell
+$env:LANGSMITH_TRACING="true"
+$env:LANGSMITH_API_KEY="your_key_here"
+$env:LANGSMITH_PROJECT="finance-mcp-dev"
+```
+
+Docker Compose reads the same variables from the repository `.env`:
+
+```bash
+docker compose up --build
+```
+
+API keys, bearer tokens, passwords, and credential-shaped fields are redacted before custom inputs or metadata are sent. Large dataframes, candle arrays, indicator series, and artifacts are represented by compact summaries.
+
 ## Stop
 
 ```bash

@@ -41,6 +41,7 @@ const defaultParameters: Record<StrategyName, string> = {
   sma_crossover: JSON.stringify({ fast_window: 20, slow_window: 50 }, null, 2),
   rsi_mean_reversion: JSON.stringify({ rsi_window: 14, lower: 30, upper: 70 }, null, 2),
   bollinger_reversion: JSON.stringify({ window: 20, std_dev: 2 }, null, 2),
+  macd_crossover: JSON.stringify({ fast_period: 12, slow_period: 26, signal_period: 9 }, null, 2),
 };
 
 export default function App() {
@@ -206,9 +207,8 @@ export default function App() {
       setUsedChat(true);
 
       if (response.status === "needs_input") {
-        const message = response.assistant_message || "More input is required.";
-        setChatError(message);
-        setError(message);
+        setChatError(null);
+        setError(null);
         return;
       }
 

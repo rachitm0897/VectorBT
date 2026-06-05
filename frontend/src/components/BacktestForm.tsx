@@ -24,6 +24,7 @@ const strategyLabels: Record<StrategyName, string> = {
   sma_crossover: "SMA crossover",
   rsi_mean_reversion: "RSI mean reversion",
   bollinger_reversion: "Bollinger reversion",
+  macd_crossover: "MACD crossover",
 };
 
 export function buildBacktestPayload(

@@ -7,6 +7,7 @@ SUPPORTED_STRATEGIES = {
     "sma_crossover",
     "rsi_mean_reversion",
     "bollinger_reversion",
+    "macd_crossover",
 }
 
 
@@ -37,6 +38,8 @@ def build_strategy_signals(strategy: str, close: pd.Series, parameters: dict | N
         return _rsi_mean_reversion(close, parameters)
     if strategy == "bollinger_reversion":
         return _bollinger_reversion(close, parameters)
+    if strategy == "macd_crossover":
+        return _macd_crossover(close, parameters)
 
     raise StrategyValidationError("unsupported_strategy", f"Unsupported strategy: {strategy}.")
 
@@ -112,6 +115,47 @@ def _bollinger_reversion(close: pd.Series, raw_parameters: dict) -> StrategySign
             "middle_band": _series_points(middle),
             "lower_band": _series_points(lower_band),
             "upper_band": _series_points(upper_band),
+        },
+        warnings=[],
+    )
+
+
+def _macd_crossover(close: pd.Series, raw_parameters: dict) -> StrategySignals:
+    fast_period = _positive_int(raw_parameters, "fast_period", 12)
+    slow_period = _positive_int(raw_parameters, "slow_period", 26)
+    signal_period = _positive_int(raw_parameters, "signal_period", 9)
+    if fast_period >= slow_period:
+        raise StrategyValidationError(
+            "invalid_parameters",
+            "fast_period must be smaller than slow_period for macd_crossover.",
+        )
+
+    fast_ema = close.ewm(span=fast_period, adjust=False, min_periods=fast_period).mean()
+    slow_ema = close.ewm(span=slow_period, adjust=False, min_periods=slow_period).mean()
+    macd = fast_ema - slow_ema
+    signal = macd.ewm(
+        span=signal_period,
+        adjust=False,
+        min_periods=signal_period,
+    ).mean()
+    histogram = macd - signal
+    above = (macd > signal).fillna(False)
+    previous_above = above.shift(1, fill_value=False)
+    entries = above & ~previous_above
+    exits = ~above & previous_above
+
+    return StrategySignals(
+        parameters={
+            "fast_period": fast_period,
+            "slow_period": slow_period,
+            "signal_period": signal_period,
+        },
+        entries=entries.fillna(False),
+        exits=exits.fillna(False),
+        indicators={
+            "macd": _series_points(macd),
+            "signal": _series_points(signal),
+            "histogram": _series_points(histogram),
         },
         warnings=[],
     )

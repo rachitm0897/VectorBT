@@ -11,6 +11,8 @@ ENV MCP_PROXY_PREFIX=/insta_backtest_MCP_server
 ENV MCP_PUBLIC_BASE_URL=https://qfsplatform.com/insta_backtest_MCP_server
 ENV MCP_CACHE_DIR=/app/cache
 ENV MCP_US_STOCK_UNIVERSE_PATH=/app/us_stocks_only_universe.json
+ENV LANGSMITH_TRACING=false
+ENV LANGSMITH_PROJECT=finance-mcp-dev
 
 WORKDIR /app
 
@@ -24,6 +26,7 @@ COPY server.py ./
 COPY us_stocks_only_universe.json ./
 
 RUN pip install --no-cache-dir .
+RUN python -c "import talib; print(talib.__version__)"
 
 EXPOSE 8000 8001
 

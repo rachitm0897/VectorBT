@@ -2,7 +2,11 @@ export const DEFAULT_CHAT_URL = normalizeDefault("VITE_DEFAULT_CHAT_URL", "https
 export const DEFAULT_CHAT_MODEL = normalizeDefault("VITE_DEFAULT_MODEL", "gpt-4o-mini");
 export const METABASE_URL = normalizeUrl(import.meta.env.VITE_METABASE_URL, "http://localhost:3000");
 
-export type StrategyName = "sma_crossover" | "rsi_mean_reversion" | "bollinger_reversion";
+export type StrategyName =
+  | "sma_crossover"
+  | "rsi_mean_reversion"
+  | "bollinger_reversion"
+  | "macd_crossover";
 
 export type LlmConfig = {
   chatUrl: string;

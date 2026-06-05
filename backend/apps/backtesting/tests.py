@@ -2,7 +2,10 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 
-from apps.backtesting.mcp_client import run_remote_portfolio_optimization
+from apps.backtesting.mcp_client import (
+    discover_remote_research_name,
+    run_remote_portfolio_optimization,
+)
 
 
 class PortfolioMCPClientTests(SimpleTestCase):
@@ -105,3 +108,50 @@ class PortfolioMCPClientTests(SimpleTestCase):
         self.assertEqual(response["parsed_request"]["sector"], "Technology")
         self.assertEqual(response["portfolio_result"]["selection_mode"], "sector")
         self.assertEqual(response["portfolio_result"]["symbols_used"], ["AAPL", "MSFT", "NVDA"])
+
+
+class MCPDiscoveryTests(SimpleTestCase):
+    @patch("apps.backtesting.mcp_client.call_mcp_tool")
+    def test_beta_is_discovered_as_indicator_after_strategy_lookup(self, call_mcp_tool):
+        call_mcp_tool.side_effect = [
+            {
+                "status": "success",
+                "strategies": [
+                    {"name": "sma_crossover"},
+                    {"name": "rsi_mean_reversion"},
+                ],
+            },
+            {
+                "status": "success",
+                "indicator": "BETA",
+                "info": {
+                    "name": "BETA",
+                    "group": "Statistic Functions",
+                    "parameters": {"timeperiod": 5},
+                },
+            },
+        ]
+
+        result = discover_remote_research_name("beta")
+
+        self.assertEqual(result["kind"], "indicator")
+        self.assertEqual(result["name"], "BETA")
+        self.assertEqual(
+            [call.args for call in call_mcp_tool.call_args_list],
+            [
+                ("list_strategies", {}),
+                ("get_indicator_info", {"indicator": "BETA"}),
+            ],
+        )
+
+    @patch("apps.backtesting.mcp_client.call_mcp_tool")
+    def test_supported_strategy_stops_after_strategy_lookup(self, call_mcp_tool):
+        call_mcp_tool.return_value = {
+            "status": "success",
+            "strategies": [{"name": "sma_crossover"}],
+        }
+
+        result = discover_remote_research_name("sma_crossover")
+
+        self.assertEqual(result["kind"], "strategy")
+        call_mcp_tool.assert_called_once_with("list_strategies", {})

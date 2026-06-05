@@ -11,6 +11,18 @@ import requests
 from django.conf import settings
 
 from apps.analytics.services import persist_mcp_tool_call
+from apps.langsmith_tracing import (
+    current_trace_headers,
+    get_request_id,
+    trace_tool_call,
+)
+
+READ_ONLY_DISCOVERY_TOOLS = {
+    "list_strategies",
+    "get_strategy_schema",
+    "list_indicators",
+    "get_indicator_info",
+}
 
 
 class MCPClientError(Exception):
@@ -19,7 +31,10 @@ class MCPClientError(Exception):
         super().__init__(message)
 
 
-async def _with_session(operation: Callable[[Any], Awaitable[Any]]) -> Any:
+async def _with_session(
+    operation: Callable[[Any], Awaitable[Any]],
+    headers: dict[str, str] | None = None,
+) -> Any:
     from mcp.client.session import ClientSession
 
     timeout_seconds = float(settings.MCP_CALL_TIMEOUT_SECONDS)
@@ -33,6 +48,7 @@ async def _with_session(operation: Callable[[Any], Awaitable[Any]]) -> Any:
             raise MCPClientError("missing_mcp_server_url", "MCP_SERVER_URL is required for remote MCP transport.")
         async with streamablehttp_client(
             settings.MCP_SERVER_URL,
+            headers=headers,
             timeout=timeout_seconds,
             sse_read_timeout=timeout_seconds,
         ) as (read_stream, write_stream, _):
@@ -47,6 +63,7 @@ async def _with_session(operation: Callable[[Any], Awaitable[Any]]) -> Any:
             raise MCPClientError("missing_mcp_server_url", "MCP_SERVER_URL is required for remote MCP transport.")
         async with sse_client(
             settings.MCP_SERVER_URL,
+            headers=headers,
             timeout=timeout_seconds,
             sse_read_timeout=timeout_seconds,
         ) as (read_stream, write_stream):
@@ -145,6 +162,41 @@ def fetch_remote_stocks_by_sector(sector: str | None = None) -> dict[str, Any]:
     }
 
 
+def discover_remote_research_name(name: str) -> dict[str, Any]:
+    normalized = str(name or "").strip().upper()
+    strategies_response = call_mcp_tool("list_strategies", {})
+    _raise_for_tool_error(strategies_response)
+    strategy_names = [
+        str(item.get("name") or "").strip()
+        for item in strategies_response.get("strategies", [])
+        if isinstance(item, dict) and item.get("name")
+    ]
+    if normalized.lower() in {strategy.lower() for strategy in strategy_names}:
+        return {
+            "kind": "strategy",
+            "name": normalized.lower(),
+            "strategies": strategy_names,
+        }
+
+    indicator_response = call_mcp_tool("get_indicator_info", {"indicator": normalized})
+    if indicator_response.get("status") != "error":
+        return {
+            "kind": "indicator",
+            "name": normalized,
+            "strategies": strategy_names,
+            "indicator_info": (
+                indicator_response.get("info")
+                if isinstance(indicator_response.get("info"), dict)
+                else {}
+            ),
+        }
+    return {
+        "kind": "unknown",
+        "name": normalized,
+        "strategies": strategy_names,
+    }
+
+
 def call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     _ensure_tool_allowed(tool_name)
     started = time.perf_counter()
@@ -162,23 +214,41 @@ def call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             raise MCPClientError(str(errors[0]), message)
         return _decode_tool_result(result)
 
-    try:
-        compact = _run_async(_with_session(operation))
-    except Exception as exc:
-        persist_mcp_tool_call(_mcp_tool_event(tool_name, arguments, started, "error", str(exc)))
-        raise
+    with trace_tool_call(
+        tool_name,
+        arguments,
+        metadata={
+            "transport": _public_transport(settings.MCP_TRANSPORT),
+            "server_url": settings.MCP_SERVER_URL,
+            "request_type": _request_type_for_tool(tool_name),
+            "selection": "deterministic_after_llm_parse",
+        },
+    ) as trace_span:
+        try:
+            compact = _run_async(
+                _with_session(operation, headers=current_trace_headers())
+            )
+        except Exception as exc:
+            persist_mcp_tool_call(
+                _mcp_tool_event(tool_name, arguments, started, "error", str(exc))
+            )
+            trace_span.set_error(exc)
+            raise
 
-    event_status = "error" if compact.get("status") == "error" else "success"
-    persist_mcp_tool_call(
-        _mcp_tool_event(
-            tool_name,
-            arguments,
-            started,
-            event_status,
-            compact.get("message") if event_status == "error" else None,
+        event_status = "error" if compact.get("status") == "error" else "success"
+        persist_mcp_tool_call(
+            _mcp_tool_event(
+                tool_name,
+                arguments,
+                started,
+                event_status,
+                compact.get("message") if event_status == "error" else None,
+            )
         )
-    )
-    return compact
+        trace_span.set_outputs(compact)
+        if event_status == "error":
+            trace_span.set_error(str(compact.get("message") or "MCP tool returned an error."))
+        return compact
 
 
 def _raise_for_tool_error(compact: dict[str, Any]) -> None:
@@ -431,6 +501,7 @@ def _mcp_tool_event(
 ) -> dict[str, Any]:
     symbols = arguments.get("symbols")
     return {
+        "request_id": get_request_id(),
         "tool_name": tool_name,
         "transport": _public_transport(settings.MCP_TRANSPORT),
         "server_url": settings.MCP_SERVER_URL,
@@ -563,6 +634,7 @@ def _public_transport(value: str) -> str:
 
 def _allowed_mcp_tools() -> set[str]:
     allowed = set(getattr(settings, "MCP_ALLOWED_TOOLS", set()) or set())
+    allowed.update(READ_ONLY_DISCOVERY_TOOLS)
     if settings.MCP_DEFAULT_TOOL:
         allowed.add(settings.MCP_DEFAULT_TOOL)
     return allowed

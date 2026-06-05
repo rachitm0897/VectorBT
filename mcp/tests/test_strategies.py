@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 
-from tools.strategies import generate_strategy_signals
+from tools.strategies import STRATEGY_REGISTRY, generate_strategy_signals
 
 
 def synthetic_prices():
@@ -55,6 +55,7 @@ def assert_signal_shape(signals, expected_length):
     assert signals["exits"].dtype == bool
     assert isinstance(signals["parameters"], dict)
     assert isinstance(signals["indicators"], dict)
+    assert all(isinstance(values, pd.Series) for values in signals["indicators"].values())
 
 
 def test_sma_strategy_returns_entries_and_exits():
@@ -87,6 +88,19 @@ def test_bollinger_strategy_returns_entries_and_exits():
     assert_signal_shape(signals, len(df))
 
 
+def test_macd_strategy_returns_crossover_signals_and_indicators():
+    df = synthetic_prices()
+    signals = generate_strategy_signals(
+        df,
+        "macd_crossover",
+        {"fast_period": 3, "slow_period": 6, "signal_period": 2},
+    )
+    assert_signal_shape(signals, len(df))
+    assert set(signals["indicators"]) == {"macd", "signal", "histogram"}
+    assert signals["entries"].any()
+    assert signals["exits"].any()
+
+
 def test_invalid_parameters_are_rejected():
     df = synthetic_prices()
     with pytest.raises(ValueError):
@@ -95,3 +109,17 @@ def test_invalid_parameters_are_rejected():
             "sma_crossover",
             {"fast_window": 20, "slow_window": 5},
         )
+
+
+def test_existing_strategy_names_are_registered():
+    assert set(STRATEGY_REGISTRY) == {
+        "sma_crossover",
+        "rsi_mean_reversion",
+        "bollinger_reversion",
+        "macd_crossover",
+    }
+
+
+def test_invalid_strategy_name_is_rejected():
+    with pytest.raises(ValueError, match="Unsupported strategy 'not_real'"):
+        generate_strategy_signals(synthetic_prices(), "not_real")

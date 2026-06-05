@@ -3,7 +3,10 @@ pyproject.toml
 server.py
 tests/test_monte_carlo.py
 tests/test_portfolio_optimization.py
+tests/test_server_indicators.py
 tests/test_strategies.py
+tests/test_talib_adapter.py
+tests/test_tracing.py
 tests/test_universe.py
 tools/__init__.py
 tools/backtesting.py
@@ -14,6 +17,8 @@ tools/monte_carlo.py
 tools/portfolio_optimization.py
 tools/schemas.py
 tools/strategies.py
+tools/talib_adapter.py
+tools/tracing.py
 tools/universe.py
 vectorbt_standalone_mcp_server.egg-info/PKG-INFO
 vectorbt_standalone_mcp_server.egg-info/SOURCES.txt

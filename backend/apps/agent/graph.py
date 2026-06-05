@@ -1,20 +1,42 @@
 import json
+import logging
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
-from typing import Any, TypedDict
+from typing import Any, Iterator, TypedDict
 
 from django.conf import settings
 from langgraph.graph import END, StateGraph
 from openai import OpenAI, OpenAIError
+from langsmith.wrappers import wrap_openai
 
 from apps.agent.cache import load_parsed_request, save_parsed_request
 from apps.api_keys import resolve_chat_api_key, resolve_chat_model, resolve_chat_url
 from apps.backtesting.engine import BacktestExecutionError, run_backtest, run_portfolio_optimization
+from apps.backtesting.mcp_client import MCPClientError, discover_remote_research_name
 from apps.backtesting.serializers import BacktestRequestSerializer, PortfolioOptimizationRequestSerializer
+from apps.langsmith_tracing import (
+    get_request_id,
+    is_langsmith_enabled,
+    safe_metadata,
+    summarize_output,
+    trace_request,
+)
 from apps.market_data.finnhub import MarketDataError
 from apps.market_data.symbols import normalize_symbol
 from apps.strategies.registry import SUPPORTED_STRATEGIES, StrategyValidationError
 
+
+logger = logging.getLogger("apps.agent.graph")
+_RUNTIME_CREDENTIALS: ContextVar[dict[str, str]] = ContextVar(
+    "agent_runtime_credentials",
+    default={},
+)
+_RUNTIME_RESULTS: ContextVar[dict[str, Any] | None] = ContextVar(
+    "agent_runtime_results",
+    default=None,
+)
 
 DEFAULTS = {
     "strategy": "sma_crossover",
@@ -44,6 +66,7 @@ STRATEGY_DEFAULT_PARAMETERS = {
     "sma_crossover": {"fast_window": 20, "slow_window": 50},
     "rsi_mean_reversion": {"rsi_window": 14, "lower": 30, "upper": 70},
     "bollinger_reversion": {"window": 20, "std_dev": 2},
+    "macd_crossover": {"fast_period": 12, "slow_period": 26, "signal_period": 9},
 }
 
 STRATEGY_ALIASES = {
@@ -57,11 +80,15 @@ STRATEGY_ALIASES = {
     "bollinger": "bollinger_reversion",
     "bollinger_bands": "bollinger_reversion",
     "bollinger_reversion": "bollinger_reversion",
+    "macd": "macd_crossover",
+    "macd_cross": "macd_crossover",
+    "macd_crossover": "macd_crossover",
 }
 
 PARSER_PROMPT = """Return JSON only. Parse a stock research request.
 Request types: strategy_backtest or portfolio_optimization.
-Strategies: sma_crossover fast_window=20 slow_window=50; rsi_mean_reversion rsi_window=14 lower=30 upper=70; bollinger_reversion window=20 std_dev=2.
+Strategies: sma_crossover fast_window=20 slow_window=50; rsi_mean_reversion rsi_window=14 lower=30 upper=70; bollinger_reversion window=20 std_dev=2; macd_crossover fast_period=12 slow_period=26 signal_period=9.
+If the user names another strategy or indicator, preserve that normalized name in strategy. Do not silently replace it with a supported strategy.
 Names: Apple=AAPL Tesla=TSLA Nvidia=NVDA Microsoft=MSFT Amazon=AMZN Meta/Facebook=META Google/Alphabet=GOOGL Netflix=NFLX.
 Backtest defaults: strategy=sma_crossover lookback=2y resolution=D initial_cash=10000 fees=0.001 monte_carlo={enabled:true,days:60,simulations:500,method:bootstrap}.
 Portfolio defaults: lookback=2y resolution=D objective=max_sharpe risk_free_rate=0 allow_short=false max_weight=0.6 num_frontier_portfolios=3000.
@@ -72,6 +99,7 @@ Examples: "Optimize AAPL, MSFT, NVDA and GOOGL using Markowitz" => request_type=
 "Find minimum volatility portfolio using AAPL MSFT AMZN META over 2 years" => request_type=portfolio_optimization symbols=["AAPL","MSFT","AMZN","META"] lookback=2y objective=min_volatility.
 "Create a max Sharpe portfolio from Technology stocks using Markowitz" => request_type=portfolio_optimization sector="Technology" symbols=[] objective=max_sharpe.
 "Find minimum volatility portfolio from Healthcare stocks" => request_type=portfolio_optimization sector="Healthcare" symbols=[] objective=min_volatility.
+"Backtest AAPL using MACD. Enter when MACD crosses above the signal line and exit when it crosses below." => request_type=strategy_backtest symbol=AAPL strategy=macd_crossover parameters={"fast_period":12,"slow_period":26,"signal_period":9}.
 Do not invent unsupported tools or request types.
 Output keys for backtests: request_type,symbol,strategy,parameters,lookback,resolution,initial_cash,fees,monte_carlo.
 Output keys for portfolios: request_type,symbols,sector,lookback,resolution,objective,risk_free_rate,allow_short,max_weight,num_frontier_portfolios."""
@@ -83,6 +111,7 @@ class AgentState(TypedDict, total=False):
     chat_api_key: str
     model: str
     finnhub_api_key: str
+    request_id: str
     parsed_request: dict[str, Any]
     validated_request: dict[str, Any]
     backtest_result: dict[str, Any]
@@ -105,35 +134,76 @@ def run_chat_workflow(
     openai_api_key: str | None = None,
     openai_base_url: str | None = None,
     openai_model: str | None = None,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
-    state = _graph().invoke(
-        {
-            "message": message,
-            "chat_url": chat_url or openai_base_url or settings.DEFAULT_CHAT_URL,
-            "chat_api_key": chat_api_key or openai_api_key or "",
-            "model": model or openai_model or settings.DEFAULT_CHAT_MODEL,
-            "finnhub_api_key": finnhub_api_key or "",
-            "status": "running",
-            "warnings": [],
-            "errors": [],
-        }
-    )
-    return {
-        "status": state.get("status", "error"),
-        "assistant_message": state.get("assistant_message", "Chat request failed."),
-        "parsed_request": state.get("validated_request") or state.get("parsed_request") or {},
-        "result_type": state.get("result_type") or (state.get("validated_request") or {}).get("request_type"),
-        "backtest_result": state.get("backtest_result") or {},
-        "portfolio_result": state.get("portfolio_result") or {},
-        "diagnostics": _result_diagnostics(state),
-        "warnings": state.get("warnings", []),
-        "errors": state.get("errors", []),
-        "missing_fields": state.get("missing_fields", []),
+    resolved_chat_url = chat_url or openai_base_url or settings.DEFAULT_CHAT_URL
+    resolved_model = model or openai_model or settings.DEFAULT_CHAT_MODEL
+    credentials = {
+        "chat_api_key": chat_api_key or openai_api_key or "",
+        "finnhub_api_key": finnhub_api_key or "",
     }
+    metadata = {
+        "model": resolved_model,
+        "tool_set": sorted(getattr(settings, "MCP_ALLOWED_TOOLS", set()) or set()),
+        "mcp_enabled": bool(settings.MCP_ENABLED),
+    }
+    runtime_results: dict[str, Any] = {}
+
+    with trace_request(
+        "finance_chat_request",
+        message,
+        metadata=metadata,
+        request_id=request_id,
+    ) as request_span:
+        request_id = get_request_id() or ""
+        with _runtime_context(credentials, runtime_results):
+            state = _graph().invoke(
+                {
+                    "message": message,
+                    "chat_url": resolved_chat_url,
+                    "model": resolved_model,
+                    "request_id": request_id,
+                    "status": "running",
+                    "warnings": [],
+                    "errors": [],
+                },
+                config={
+                    "run_name": "finance_research_graph",
+                    "tags": ["finance", "langgraph"],
+                    "metadata": safe_metadata(
+                        {
+                            "request_id": request_id,
+                            "model": resolved_model,
+                            "tool_set": metadata["tool_set"],
+                        }
+                    ),
+                },
+            )
+        result = {
+            "status": state.get("status", "error"),
+            "assistant_message": state.get("assistant_message", "Chat request failed."),
+            "parsed_request": state.get("validated_request") or state.get("parsed_request") or {},
+            "result_type": state.get("result_type") or (state.get("validated_request") or {}).get("request_type"),
+            "backtest_result": runtime_results.get("backtest_result")
+            or state.get("backtest_result")
+            or {},
+            "portfolio_result": runtime_results.get("portfolio_result")
+            or state.get("portfolio_result")
+            or {},
+            "diagnostics": _result_diagnostics(state),
+            "warnings": state.get("warnings", []),
+            "errors": state.get("errors", []),
+            "missing_fields": state.get("missing_fields", []),
+        }
+        request_span.set_outputs(result)
+        if result["status"] == "error":
+            request_span.set_error(", ".join(result["errors"]) or "Chat request failed.")
+        return result
 
 
 def parse_request_node(state: AgentState) -> AgentState:
-    api_key = resolve_chat_api_key(state.get("chat_api_key"))
+    credentials = _RUNTIME_CREDENTIALS.get()
+    api_key = resolve_chat_api_key(state.get("chat_api_key") or credentials.get("chat_api_key"))
     if not api_key:
         return {
             **state,
@@ -235,8 +305,32 @@ def validate_request_node(state: AgentState) -> AgentState:
 
     strategy = _normalize_strategy(parsed.get("strategy"))
     if strategy not in SUPPORTED_STRATEGIES:
-        strategy = DEFAULTS["strategy"]
-        warnings.append("Unsupported strategy requested; using default SMA crossover.")
+        discovery = _discover_research_name(strategy)
+        supported = discovery.get("strategies") or sorted(SUPPORTED_STRATEGIES)
+        supported_text = ", ".join(supported)
+        if discovery.get("kind") == "indicator":
+            return {
+                **state,
+                "status": "needs_input",
+                "result_type": "strategy_backtest",
+                "errors": ["indicator_not_strategy"],
+                "missing_fields": ["strategy_rules"],
+                "assistant_message": (
+                    f"{discovery.get('name')} is available as a TA-Lib indicator, not a "
+                    "runnable trading strategy. A backtest needs explicit entry and exit "
+                    f"rules. Supported strategies: {supported_text}."
+                ),
+            }
+        return {
+            **state,
+            "status": "needs_input",
+            "result_type": "strategy_backtest",
+            "errors": ["unsupported_strategy"],
+            "missing_fields": ["strategy"],
+            "assistant_message": (
+                f"Unsupported strategy '{strategy}'. Supported strategies: {supported_text}."
+            ),
+        }
 
     parameters = _defaulted_parameters(strategy, parsed.get("parameters"))
     monte_carlo = _defaulted_monte_carlo(parsed.get("monte_carlo"))
@@ -271,25 +365,38 @@ def run_backtest_node(state: AgentState) -> AgentState:
         return state
 
     try:
+        credentials = _RUNTIME_CREDENTIALS.get()
+        finnhub_api_key = state.get("finnhub_api_key") or credentials.get("finnhub_api_key")
         if state.get("result_type") == "portfolio_optimization":
             result = run_portfolio_optimization(
                 state["validated_request"],
-                finnhub_api_key=state.get("finnhub_api_key"),
+                finnhub_api_key=finnhub_api_key,
                 analytics_source="chat",
             )
+            portfolio_result = result.get("portfolio_result") or result
+            result_sink = _RUNTIME_RESULTS.get()
+            if result_sink is not None:
+                result_sink["portfolio_result"] = portfolio_result
             return {
                 **state,
                 "status": "success",
-                "portfolio_result": result.get("portfolio_result") or result,
+                "portfolio_result": (
+                    summarize_output(portfolio_result)
+                    if result_sink is not None
+                    else portfolio_result
+                ),
                 "diagnostics": result.get("diagnostics") or {},
                 "warnings": [*state.get("warnings", []), *(result.get("warnings") or [])],
             }
 
         result = run_backtest(
             state["validated_request"],
-            finnhub_api_key=state.get("finnhub_api_key"),
+            finnhub_api_key=finnhub_api_key,
             analytics_source="chat",
         )
+        result_sink = _RUNTIME_RESULTS.get()
+        if result_sink is not None:
+            result_sink["backtest_result"] = result
     except MarketDataError as exc:
         return {**state, "status": "error", "errors": [exc.code], "assistant_message": str(exc)}
     except StrategyValidationError as exc:
@@ -297,6 +404,7 @@ def run_backtest_node(state: AgentState) -> AgentState:
     except BacktestExecutionError as exc:
         return {**state, "status": "error", "errors": [exc.code], "assistant_message": str(exc)}
     except Exception:
+        logger.exception("Backtest workflow failed [request_id=%s]", get_request_id())
         return {
             **state,
             "status": "error",
@@ -304,7 +412,11 @@ def run_backtest_node(state: AgentState) -> AgentState:
             "assistant_message": "Backtest failed unexpectedly.",
         }
 
-    return {**state, "status": "success", "backtest_result": result}
+    return {
+        **state,
+        "status": "success",
+        "backtest_result": summarize_output(result) if result_sink is not None else result,
+    }
 
 
 def format_response_node(state: AgentState) -> AgentState:
@@ -345,21 +457,52 @@ def _graph():
 
 def _call_parser_llm(message: str, api_key: str, chat_url: str, model: str) -> dict[str, Any]:
     client = OpenAI(api_key=api_key, base_url=chat_url)
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0,
-        max_tokens=520,
-        response_format={"type": "json_object"},
-        messages=[
+    request_options: dict[str, Any] = {
+        "model": model,
+        "temperature": 0,
+        "max_tokens": 520,
+        "response_format": {"type": "json_object"},
+        "messages": [
             {"role": "system", "content": PARSER_PROMPT},
             {"role": "user", "content": message},
         ],
+    }
+    if is_langsmith_enabled():
+        client = wrap_openai(client, chat_name="finance_request_parser")
+        request_options["langsmith_extra"] = {
+            "metadata": safe_metadata(
+                {
+                    "request_id": get_request_id(),
+                    "model": model,
+                    "messages_count": 2,
+                    "purpose": "parse_finance_request",
+                    "tool_set": sorted(getattr(settings, "MCP_ALLOWED_TOOLS", set()) or set()),
+                }
+            ),
+            "tags": ["finance", "parser"],
+        }
+    response = client.chat.completions.create(
+        **request_options,
     )
     content = response.choices[0].message.content or "{}"
     parsed = json.loads(content)
     if not isinstance(parsed, dict):
         raise ValueError("Parser did not return a JSON object.")
     return parsed
+
+
+@contextmanager
+def _runtime_context(
+    credentials: dict[str, str],
+    results: dict[str, Any],
+) -> Iterator[None]:
+    credentials_token = _RUNTIME_CREDENTIALS.set(dict(credentials))
+    results_token = _RUNTIME_RESULTS.set(results)
+    try:
+        yield
+    finally:
+        _RUNTIME_RESULTS.reset(results_token)
+        _RUNTIME_CREDENTIALS.reset(credentials_token)
 
 
 def _result_diagnostics(state: AgentState) -> dict[str, Any]:
@@ -450,6 +593,30 @@ def _normalize_strategy(value: Any) -> str:
     return STRATEGY_ALIASES.get(key, key)
 
 
+def _discover_research_name(name: str) -> dict[str, Any]:
+    if not settings.MCP_ENABLED:
+        return {
+            "kind": "unknown",
+            "name": name,
+            "strategies": sorted(SUPPORTED_STRATEGIES),
+        }
+    try:
+        return discover_remote_research_name(name)
+    except MCPClientError as exc:
+        logger.warning(
+            "MCP capability discovery failed [request_id=%s code=%s]",
+            get_request_id(),
+            exc.code,
+        )
+    except Exception:
+        logger.exception("MCP capability discovery failed [request_id=%s]", get_request_id())
+    return {
+        "kind": "unknown",
+        "name": name,
+        "strategies": sorted(SUPPORTED_STRATEGIES),
+    }
+
+
 def _defaulted_parameters(strategy: str, raw_parameters: Any) -> dict[str, Any]:
     parameters = dict(STRATEGY_DEFAULT_PARAMETERS[strategy])
     if isinstance(raw_parameters, dict):
@@ -469,6 +636,31 @@ def _defaulted_parameters(strategy: str, raw_parameters: Any) -> dict[str, Any]:
         parameters["window"] = _positive_int(parameters.get("window"), 20)
         parameters["std_dev"] = parameters.get("std_dev") or parameters.get("std") or parameters.get("standard_deviations")
         parameters["std_dev"] = _positive_float(parameters.get("std_dev"), 2.0)
+    elif strategy == "macd_crossover":
+        raw = raw_parameters if isinstance(raw_parameters, dict) else {}
+        parameters["fast_period"] = (
+            raw.get("fast_period")
+            or raw.get("fastperiod")
+            or raw.get("fast")
+            or parameters.get("fast_period")
+        )
+        parameters["slow_period"] = (
+            raw.get("slow_period")
+            or raw.get("slowperiod")
+            or raw.get("slow")
+            or parameters.get("slow_period")
+        )
+        parameters["signal_period"] = (
+            raw.get("signal_period")
+            or raw.get("signalperiod")
+            or raw.get("signal")
+            or parameters.get("signal_period")
+        )
+        parameters["fast_period"] = _positive_int(parameters.get("fast_period"), 12)
+        parameters["slow_period"] = _positive_int(parameters.get("slow_period"), 26)
+        parameters["signal_period"] = _positive_int(parameters.get("signal_period"), 9)
+        for alias in ("fastperiod", "fast", "slowperiod", "slow", "signalperiod", "signal"):
+            parameters.pop(alias, None)
 
     return parameters
 
@@ -562,4 +754,5 @@ def _strategy_label(strategy: str) -> str:
         "sma_crossover": "SMA Crossover",
         "rsi_mean_reversion": "RSI Mean Reversion",
         "bollinger_reversion": "Bollinger Reversion",
+        "macd_crossover": "MACD Crossover",
     }.get(strategy, strategy)

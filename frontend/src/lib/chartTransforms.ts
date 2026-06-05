@@ -309,7 +309,55 @@ export function deriveIndicatorSeries(priceData: PricePoint[] = [], request?: { 
     };
   }
 
+  if (strategy === "macd_crossover") {
+    const fastPeriod = asNumber(parameters.fast_period) ?? 12;
+    const slowPeriod = asNumber(parameters.slow_period) ?? 26;
+    const signalPeriod = asNumber(parameters.signal_period) ?? 9;
+    const fast = exponentialMovingAverage(closeValues, fastPeriod);
+    const slow = exponentialMovingAverage(closeValues, slowPeriod);
+    const macdValues = fast.map((value, index) =>
+      value === null || slow[index] === null ? null : value - (slow[index] as number),
+    );
+    const signalValues = exponentialMovingAverage(macdValues, signalPeriod);
+    return {
+      macd: toIndicatorPoints(candles, macdValues),
+      signal: toIndicatorPoints(candles, signalValues),
+      histogram: toIndicatorPoints(
+        candles,
+        macdValues.map((value, index) =>
+          value === null || signalValues[index] === null
+            ? null
+            : value - (signalValues[index] as number),
+        ),
+      ),
+    };
+  }
+
   return {};
+}
+
+function exponentialMovingAverage(values: Array<number | null>, period: number): Array<number | null> {
+  const result: Array<number | null> = Array(values.length).fill(null);
+  let ema: number | null = null;
+  let validCount = 0;
+  const multiplier = 2 / (period + 1);
+
+  values.forEach((value, index) => {
+    if (value === null) return;
+    validCount += 1;
+    ema = ema === null ? value : (value - ema) * multiplier + ema;
+    if (validCount >= period) result[index] = ema;
+  });
+  return result;
+}
+
+function toIndicatorPoints(candles: CandlePoint[], values: Array<number | null>) {
+  return candles
+    .map((point, index) => {
+      const value = values[index];
+      return value === null ? null : { time: point.time, value };
+    })
+    .filter((point): point is { time: string; value: number } => point !== null);
 }
 
 function rollingAverage(candles: CandlePoint[], values: number[], window: number) {

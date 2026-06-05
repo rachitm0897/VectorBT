@@ -23,6 +23,8 @@ from tools.market_data import fetch_finnhub_candles_with_metadata
 from tools.monte_carlo import run_bootstrap_monte_carlo
 from tools.portfolio_optimization import run_markowitz_optimization_core
 from tools.schemas import (
+    IndicatorBatchRequest,
+    IndicatorRequest,
     MarketDataRequest,
     MonteCarloRequest,
     StrategyBacktestRequest,
@@ -30,6 +32,12 @@ from tools.schemas import (
     parse_request,
 )
 from tools.strategies import generate_strategy_signals, list_strategy_definitions, strategy_schema
+from tools.talib_adapter import (
+    compute_talib_indicator,
+    get_talib_indicator_info,
+    list_talib_indicators,
+)
+from tools.tracing import configure_langsmith_middleware, get_request_id, traced_tool
 from tools.universe import (
     list_all_stocks as universe_list_all_stocks,
     list_sectors as universe_list_sectors,
@@ -85,7 +93,7 @@ def _error_response(message: str, errors: list[str] | None = None) -> dict[str, 
 
 
 def _unexpected_error_response(context: str, exc: Exception) -> dict[str, Any]:
-    logger.exception("%s failed: %s", context, exc)
+    logger.exception("%s failed [request_id=%s]: %s", context, get_request_id(), exc)
     message = str(exc).strip() or f"Unexpected error while running {context}."
     return _error_response(message, ["unexpected_error"])
 
@@ -126,6 +134,12 @@ def _signals_artifact(signals: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _serialize_indicator_outputs(
+    outputs: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    return {name: series_to_points(values) for name, values in outputs.items()}
+
+
 def _run_backtest_components(
     request: StrategyBacktestRequest | StrategyResearchRequest,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -159,12 +173,14 @@ def _run_backtest_components(
 
 
 @mcp.tool()
+@traced_tool()
 def list_strategies() -> dict[str, Any]:
     """List supported prototype trading strategies."""
     return {"status": "success", "strategies": list_strategy_definitions()}
 
 
 @mcp.tool()
+@traced_tool()
 def get_strategy_schema(strategy: str) -> dict[str, Any]:
     """Return the parameter schema for a supported strategy."""
     try:
@@ -178,6 +194,156 @@ def get_strategy_schema(strategy: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@traced_tool()
+def list_indicators() -> dict[str, Any]:
+    """List TA-Lib indicators available through the finance indicator workflow."""
+    return {"status": "success", "indicators": list_talib_indicators()}
+
+
+@mcp.tool()
+@traced_tool()
+def get_indicator_info(indicator: str) -> dict[str, Any]:
+    """Return TA-Lib metadata for one indicator."""
+    try:
+        normalized = str(indicator or "").strip().upper()
+        return {
+            "status": "success",
+            "indicator": normalized,
+            "info": get_talib_indicator_info(normalized),
+        }
+    except ValueError as exc:
+        return _error_response(str(exc), ["unsupported_indicator"])
+
+
+@mcp.tool()
+@traced_tool()
+def compute_indicator(
+    symbol: str,
+    indicator: str,
+    parameters: dict[str, Any] | None = None,
+    lookback: str = "2y",
+    resolution: str = "D",
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    """Fetch one symbol and compute one TA-Lib indicator."""
+    try:
+        request = parse_request(
+            IndicatorRequest,
+            {
+                "symbol": symbol,
+                "indicator": indicator,
+                "parameters": parameters or {},
+                "lookback": lookback,
+                "resolution": resolution,
+                "finnhub_api_key": finnhub_api_key,
+            },
+        )
+        df, metadata = fetch_finnhub_candles_with_metadata(
+            request.symbol,
+            lookback=request.lookback,
+            resolution=request.resolution,
+            api_key=request.finnhub_api_key,
+        )
+        normalized = request.indicator.strip().upper()
+        outputs = compute_talib_indicator(df, normalized, request.parameters)
+        return {
+            "status": "success",
+            "symbol": metadata["symbol"],
+            "indicator": normalized,
+            "parameters": request.parameters,
+            "lookback": request.lookback,
+            "resolution": request.resolution,
+            "data_quality": _data_quality(metadata),
+            "outputs": _serialize_indicator_outputs(outputs),
+        }
+    except ValidationError as exc:
+        return _validation_error_response(exc)
+    except ValueError as exc:
+        return _value_error_response(exc, "indicator_error")
+    except Exception as exc:
+        return _unexpected_error_response("indicator computation", exc)
+
+
+@mcp.tool()
+@traced_tool()
+def compute_indicators_batch(
+    symbol: str,
+    indicators: list[dict[str, Any]],
+    lookback: str = "2y",
+    resolution: str = "D",
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    """Fetch one symbol once and compute multiple TA-Lib indicators."""
+    try:
+        request = parse_request(
+            IndicatorBatchRequest,
+            {
+                "symbol": symbol,
+                "indicators": indicators,
+                "lookback": lookback,
+                "resolution": resolution,
+                "finnhub_api_key": finnhub_api_key,
+            },
+        )
+        df, metadata = fetch_finnhub_candles_with_metadata(
+            request.symbol,
+            lookback=request.lookback,
+            resolution=request.resolution,
+            api_key=request.finnhub_api_key,
+        )
+
+        results: list[dict[str, Any]] = []
+        indicator_errors: list[dict[str, Any]] = []
+        for spec in request.indicators:
+            normalized = spec.name.strip().upper()
+            try:
+                outputs = compute_talib_indicator(df, normalized, spec.parameters)
+                result = {
+                    "indicator": normalized,
+                    "parameters": spec.parameters,
+                    "outputs": _serialize_indicator_outputs(outputs),
+                }
+                if spec.alias:
+                    result["alias"] = spec.alias
+                results.append(result)
+            except ValueError as exc:
+                error = {
+                    "indicator": normalized,
+                    "message": str(exc),
+                }
+                if spec.alias:
+                    error["alias"] = spec.alias
+                indicator_errors.append(error)
+
+        status = "success"
+        if indicator_errors and results:
+            status = "partial_success"
+        elif indicator_errors:
+            status = "error"
+
+        response = {
+            "status": status,
+            "symbol": metadata["symbol"],
+            "lookback": request.lookback,
+            "resolution": request.resolution,
+            "data_quality": _data_quality(metadata),
+            "indicators": results,
+            "indicator_errors": indicator_errors,
+        }
+        if not results:
+            response["message"] = "No indicators were computed successfully."
+            response["errors"] = ["indicator_computation_failed"]
+        return response
+    except ValidationError as exc:
+        return _validation_error_response(exc)
+    except ValueError as exc:
+        return _value_error_response(exc, "indicator_batch_error")
+    except Exception as exc:
+        return _unexpected_error_response("batch indicator computation", exc)
+
+
+@mcp.tool()
+@traced_tool()
 def list_stock_universe(sector: str | None = None, limit: int = 500) -> dict[str, Any]:
     """List compact US stock universe records, optionally filtered by sector."""
     try:
@@ -201,6 +367,7 @@ def list_stock_universe(sector: str | None = None, limit: int = 500) -> dict[str
 
 
 @mcp.tool()
+@traced_tool()
 def list_sectors() -> dict[str, Any]:
     """List sectors found in the US stock universe."""
     try:
@@ -212,6 +379,7 @@ def list_sectors() -> dict[str, Any]:
 
 
 @mcp.tool()
+@traced_tool()
 def list_stocks_by_sector(sector: str) -> dict[str, Any]:
     """List compact US stock records for one sector."""
     try:
@@ -224,6 +392,7 @@ def list_stocks_by_sector(sector: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@traced_tool()
 def resolve_symbols_for_sector(sector: str) -> dict[str, Any]:
     """Resolve all ticker symbols for a sector in the US stock universe."""
     try:
@@ -241,6 +410,7 @@ def resolve_symbols_for_sector(sector: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@traced_tool()
 def fetch_market_data_summary(
     symbol: str,
     lookback: str = "2y",
@@ -283,6 +453,7 @@ def fetch_market_data_summary(
 
 
 @mcp.tool()
+@traced_tool()
 def run_strategy_backtest(
     symbol: str,
     strategy: str,
@@ -332,6 +503,7 @@ def run_strategy_backtest(
 
 
 @mcp.tool()
+@traced_tool()
 def run_monte_carlo_simulation(
     symbol: str,
     lookback: str = "2y",
@@ -397,6 +569,7 @@ def run_monte_carlo_simulation(
 
 
 @mcp.tool()
+@traced_tool()
 def run_strategy_research(
     symbol: str,
     strategy: str,
@@ -466,6 +639,7 @@ def run_strategy_research(
 
 
 @mcp.tool()
+@traced_tool()
 def run_markowitz_optimization(
     symbols: list[str] | None = None,
     sector: str | None = None,
@@ -532,6 +706,7 @@ def _run_http_app(transport: str) -> None:
     import uvicorn
 
     app = mcp.sse_app() if transport == "sse" else mcp.streamable_http_app()
+    configure_langsmith_middleware(app)
     app.add_route("/health", _health, methods=["GET"])
     app.add_route(f"{MCP_PROXY_PREFIX}/health", _health, methods=["GET"])
     app.add_route("/artifacts/{artifact_id}", _artifact, methods=["GET"])

@@ -30,11 +30,16 @@ Server-side fallback keys:
 - `MCP_CALL_TIMEOUT_SECONDS`
 - `MCP_DEFAULT_TOOL`
 - `MCP_ALLOWED_TOOLS`
+- `LANGSMITH_TRACING`
+- `LANGSMITH_API_KEY`
+- `LANGSMITH_PROJECT`
 
 The frontend can also send per-user keys on each request. These headers take precedence over the server-side fallback values:
 
 - `X-OpenAI-API-Key`
 - `X-Finnhub-API-Key`
+
+When LangSmith tracing is enabled, the chat request, LangGraph nodes, wrapped OpenAI parser call, and selected MCP tool are traced. Runtime OpenAI and Finnhub keys are kept outside LangGraph state, and custom tracing metadata is sanitized before export.
 
 ## Run Locally
 
@@ -104,10 +109,12 @@ MCP_TRANSPORT=streamable_http
 MCP_SERVER_URL=https://qfsplatform.com/insta_backtest_MCP_server/mcp
 MCP_CALL_TIMEOUT_SECONDS=120
 MCP_DEFAULT_TOOL=run_strategy_research
-MCP_ALLOWED_TOOLS=run_strategy_research,run_markowitz_optimization,list_stock_universe,list_sectors,list_stocks_by_sector
+MCP_ALLOWED_TOOLS=run_strategy_research,run_markowitz_optimization,list_strategies,get_strategy_schema,list_indicators,get_indicator_info,list_stock_universe,list_sectors,list_stocks_by_sector
 ```
 
-The backend uses the user-provided OpenAI key for chat parsing and deterministically calls approved MCP tools only. Strategy backtests continue to call `run_strategy_research`. Portfolio optimization calls `run_markowitz_optimization`. Universe routes proxy `list_sectors` and `list_stocks_by_sector`. The backend passes the user-provided Finnhub key to market-data MCP tool arguments and does not include the OpenAI key in MCP calls.
+The backend uses the user-provided OpenAI key for chat parsing and deterministically calls approved MCP tools only. Strategy backtests continue to call `run_strategy_research`. Unknown strategy names trigger read-only MCP capability discovery through `list_strategies` and `get_indicator_info`; indicators are not treated as strategies without explicit entry and exit rules. Portfolio optimization calls `run_markowitz_optimization`. Universe routes proxy `list_sectors` and `list_stocks_by_sector`. The backend passes the user-provided Finnhub key to market-data MCP tool arguments and does not include the OpenAI key in MCP calls.
+
+`macd_crossover` is a registered strategy with defaults `fast_period=12`, `slow_period=26`, and `signal_period=9`. It enters on an upward MACD/signal crossover and exits on a downward crossover.
 
 The backend serves:
 

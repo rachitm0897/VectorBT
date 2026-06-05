@@ -42,6 +42,24 @@
 }
 ```
 
+MACD crossover:
+
+```json
+{
+  "symbol": "AAPL",
+  "strategy": "macd_crossover",
+  "parameters": {
+    "fast_period": 12,
+    "slow_period": 26,
+    "signal_period": 9
+  },
+  "lookback": "2y",
+  "resolution": "D",
+  "initial_cash": 10000,
+  "fees": 0.001
+}
+```
+
 ## run_monte_carlo_simulation
 
 ```json

@@ -36,6 +36,7 @@ class ChatAPIView(APIView):
             chat_api_key=api_keys.chat_api_key,
             model=api_keys.model,
             finnhub_api_key=api_keys.finnhub_api_key,
+            request_id=request.headers.get("X-Request-ID"),
         )
         response_status = status.HTTP_200_OK
         if result["status"] == "error":
