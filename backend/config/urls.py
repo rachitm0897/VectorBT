@@ -5,6 +5,7 @@ from apps.analytics.views import AnalyticsStatusAPIView
 from apps.agent.views import ChatAPIView
 from apps.backtesting.views import (
     BacktestAPIView,
+    FactorPortfolioAPIView,
     MCPStatusAPIView,
     PortfolioOptimizeAPIView,
     UniverseSectorsAPIView,
@@ -22,6 +23,7 @@ api_patterns = [
     path("mcp/status/", MCPStatusAPIView.as_view(), name="mcp-status"),
     path("backtest/", BacktestAPIView.as_view(), name="backtest"),
     path("portfolio/optimize/", PortfolioOptimizeAPIView.as_view(), name="portfolio-optimize"),
+    path("portfolio/factor/", FactorPortfolioAPIView.as_view(), name="factor-portfolio"),
     path("universe/sectors/", UniverseSectorsAPIView.as_view(), name="universe-sectors"),
     path("universe/stocks/", UniverseStocksAPIView.as_view(), name="universe-stocks"),
     path("chat/", ChatAPIView.as_view(), name="chat"),

@@ -13,9 +13,9 @@ from langsmith.wrappers import wrap_openai
 
 from apps.agent.cache import load_parsed_request, save_parsed_request
 from apps.api_keys import resolve_chat_api_key, resolve_chat_model, resolve_chat_url
-from apps.backtesting.engine import BacktestExecutionError, run_backtest, run_portfolio_optimization
+from apps.backtesting.engine import BacktestExecutionError, run_backtest, run_factor_portfolio, run_portfolio_optimization
 from apps.backtesting.mcp_client import MCPClientError, discover_remote_research_name
-from apps.backtesting.serializers import BacktestRequestSerializer, PortfolioOptimizationRequestSerializer
+from apps.backtesting.serializers import BacktestRequestSerializer, FactorPortfolioRequestSerializer, PortfolioOptimizationRequestSerializer
 from apps.langsmith_tracing import (
     get_request_id,
     is_langsmith_enabled,
@@ -70,6 +70,48 @@ PORTFOLIO_DEFAULTS = {
         "scenario_overrides": {},
     },
 }
+FACTOR_PORTFOLIO_DEFAULTS = {
+    "selection_mode": "symbols",
+    "lookback": "2y",
+    "resolution": "D",
+    "factor_model": {
+        "enabled": True,
+        "normalization_mode": "sector",
+        "weights": {
+            "fundamental_quality": 0.30,
+            "valuation": 0.20,
+            "momentum": 0.20,
+            "analyst": 0.15,
+            "financial_risk": 0.15,
+        },
+        "minimum_data_coverage_pct": 60,
+        "selection_method": "top_n",
+        "top_n": 10,
+        "top_percentile": 30,
+        "minimum_score": None,
+    },
+    "optimization": {
+        "objective": "max_sharpe",
+        "minimum_weight": 0,
+        "maximum_weight": 0.25,
+        "risk_free_rate": 0.04,
+        "expected_return_method": "historical",
+    },
+    "score_tilt": {
+        "enabled": False,
+        "strength": 0.20,
+        "maximum_adjustment_pct": 0.05,
+    },
+    "monte_carlo": {
+        "enabled": True,
+        "days": 60,
+        "simulations": 500,
+        "block_size": 5,
+        "seed": 42,
+        "scenarios": ["neutral", "bullish", "bearish", "crash"],
+        "scenario_overrides": {},
+    },
+}
 
 STRATEGY_DEFAULT_PARAMETERS = {
     "sma_crossover": {"fast_window": 20, "slow_window": 50},
@@ -95,13 +137,15 @@ STRATEGY_ALIASES = {
 }
 
 PARSER_PROMPT = """Return JSON only. Parse a stock research request.
-Request types: strategy_backtest or portfolio_optimization.
+Request types: strategy_backtest, portfolio_optimization, or factor_portfolio.
 Strategies: sma_crossover fast_window=20 slow_window=50; rsi_mean_reversion rsi_window=14 lower=30 upper=70; bollinger_reversion window=20 std_dev=2; macd_crossover fast_period=12 slow_period=26 signal_period=9.
 If the user names another strategy or indicator, preserve that normalized name in strategy. Do not silently replace it with a supported strategy.
 Names: Apple=AAPL Tesla=TSLA Nvidia=NVDA Microsoft=MSFT Amazon=AMZN Meta/Facebook=META Google/Alphabet=GOOGL Netflix=NFLX.
 Backtest defaults: strategy=sma_crossover lookback=2y resolution=D initial_cash=10000 fees=0.001 monte_carlo={enabled:true,days:60,simulations:500,method:bootstrap}.
 Portfolio defaults: lookback=2y resolution=D objective=max_sharpe risk_free_rate=0 allow_short=false max_weight=0.6 num_frontier_portfolios=3000 monte_carlo={enabled:false,days:60,simulations:500,block_size:5,seed:42,scenarios:["neutral","bullish","bearish","crash"],scenario_overrides:{}}.
 Portfolio scenario presets are only neutral,bullish,bearish,crash. Do not invent scenario names.
+Factor portfolio defaults: factor_model weights fundamental_quality=0.30 valuation=0.20 momentum=0.20 analyst=0.15 financial_risk=0.15, normalization_mode=sector, minimum_data_coverage_pct=60, selection_method=top_n, top_n=10. optimization objective=max_sharpe maximum_weight=0.25 risk_free_rate=0.04 expected_return_method=historical. score_tilt disabled by default.
+Factor requests use internally calculated research scores only; never call them Morningstar or StarMine ratings.
 Lookback allowed: 1mo,6mo,1y,2y,5y. Use null when symbol missing.
 For portfolio requests output symbols as tickers. If sector-only, output sector and symbols=[].
 Examples: "Optimize AAPL, MSFT, NVDA and GOOGL using Markowitz" => request_type=portfolio_optimization symbols=["AAPL","MSFT","NVDA","GOOGL"] objective=max_sharpe.
@@ -111,10 +155,14 @@ Examples: "Optimize AAPL, MSFT, NVDA and GOOGL using Markowitz" => request_type=
 "Find minimum volatility portfolio from Healthcare stocks" => request_type=portfolio_optimization sector="Healthcare" symbols=[] objective=min_volatility.
 "Create a max Sharpe portfolio from Technology stocks and test neutral, bullish, bearish and crash scenarios for 60 days." => request_type=portfolio_optimization sector="Technology" symbols=[] objective=max_sharpe monte_carlo={"enabled":true,"days":60,"simulations":500,"block_size":5,"seed":42,"scenarios":["neutral","bullish","bearish","crash"],"scenario_overrides":{}}.
 "Optimize AAPL, MSFT, NVDA and GOOGL, then run a 90-day bearish and crash Monte Carlo simulation." => request_type=portfolio_optimization symbols=["AAPL","MSFT","NVDA","GOOGL"] objective=max_sharpe monte_carlo={"enabled":true,"days":90,"simulations":500,"block_size":5,"seed":42,"scenarios":["bearish","crash"],"scenario_overrides":{}}.
+"Create a factor-ranked maximum Sharpe portfolio from technology stocks." => request_type=factor_portfolio sector="Technology" selection_mode=sector symbols=[] optimization={"objective":"max_sharpe","expected_return_method":"historical"}.
+"Rank AAPL, MSFT, NVDA, GOOGL and META using quality, value and momentum, select the top three and run crash scenarios." => request_type=factor_portfolio symbols=["AAPL","MSFT","NVDA","GOOGL","META"] selection_mode=symbols factor_model={"selection_method":"top_n","top_n":3} monte_carlo={"enabled":true,"days":60,"simulations":500,"block_size":5,"seed":42,"scenarios":["crash"],"scenario_overrides":{}}.
+"Build a low-risk portfolio using stocks with a combined score above 65." => request_type=factor_portfolio selection_mode=sector sector="Technology" factor_model={"selection_method":"minimum_score","minimum_score":65} optimization={"objective":"min_volatility","expected_return_method":"historical"}.
 "Backtest AAPL using MACD. Enter when MACD crosses above the signal line and exit when it crosses below." => request_type=strategy_backtest symbol=AAPL strategy=macd_crossover parameters={"fast_period":12,"slow_period":26,"signal_period":9}.
 Do not invent unsupported tools or request types.
 Output keys for backtests: request_type,symbol,strategy,parameters,lookback,resolution,initial_cash,fees,monte_carlo.
-Output keys for portfolios: request_type,symbols,sector,lookback,resolution,objective,risk_free_rate,allow_short,max_weight,num_frontier_portfolios,monte_carlo."""
+Output keys for portfolios: request_type,symbols,sector,lookback,resolution,objective,risk_free_rate,allow_short,max_weight,num_frontier_portfolios,monte_carlo.
+Output keys for factor portfolios: request_type,symbols,sector,selection_mode,lookback,resolution,factor_model,optimization,score_tilt,monte_carlo."""
 
 
 class AgentState(TypedDict, total=False):
@@ -128,6 +176,7 @@ class AgentState(TypedDict, total=False):
     validated_request: dict[str, Any]
     backtest_result: dict[str, Any]
     portfolio_result: dict[str, Any]
+    factor_portfolio_result: dict[str, Any]
     diagnostics: dict[str, Any]
     result_type: str
     assistant_message: str
@@ -202,6 +251,9 @@ def run_chat_workflow(
             "portfolio_result": runtime_results.get("portfolio_result")
             or state.get("portfolio_result")
             or {},
+            "factor_portfolio_result": runtime_results.get("factor_portfolio_result")
+            or state.get("factor_portfolio_result")
+            or {},
             "diagnostics": _result_diagnostics(state),
             "warnings": state.get("warnings", []),
             "errors": state.get("errors", []),
@@ -252,6 +304,35 @@ def validate_request_node(state: AgentState) -> AgentState:
     parsed = state.get("parsed_request") or {}
     warnings = list(state.get("warnings", []))
     request_type = _normalize_request_type(parsed)
+
+    if request_type == "factor_portfolio":
+        symbols = _normalize_symbols(parsed.get("symbols") or parsed.get("symbol"))
+        sector = _normalize_sector(parsed.get("sector"))
+        selection_mode = "sector" if sector and not symbols else str(parsed.get("selection_mode") or "symbols")
+        request_data = {
+            "request_type": "factor_portfolio",
+            "symbols": symbols,
+            "sector": sector,
+            "selection_mode": "sector" if selection_mode == "sector" or (sector and not symbols) else "symbols",
+            "lookback": _normalize_portfolio_lookback(parsed.get("lookback")),
+            "resolution": "D",
+            "factor_model": _defaulted_factor_model(parsed.get("factor_model")),
+            "optimization": _defaulted_factor_optimization(parsed.get("optimization"), parsed.get("objective")),
+            "score_tilt": _defaulted_score_tilt(parsed.get("score_tilt")),
+            "monte_carlo": _defaulted_portfolio_monte_carlo(parsed.get("monte_carlo")),
+        }
+        serializer = FactorPortfolioRequestSerializer(data=request_data)
+        if not serializer.is_valid():
+            return {
+                **state,
+                "status": "error",
+                "result_type": "factor_portfolio",
+                "errors": ["invalid_parsed_request"],
+                "assistant_message": "The parsed factor portfolio request was invalid after applying defaults.",
+            }
+        validated = dict(serializer.validated_data)
+        validated["request_type"] = "factor_portfolio"
+        return {**state, "validated_request": validated, "result_type": "factor_portfolio", "warnings": warnings}
 
     if request_type == "portfolio_optimization":
         symbols = _normalize_symbols(parsed.get("symbols") or parsed.get("symbol"))
@@ -401,6 +482,27 @@ def run_backtest_node(state: AgentState) -> AgentState:
                 "diagnostics": result.get("diagnostics") or {},
                 "warnings": [*state.get("warnings", []), *(result.get("warnings") or [])],
             }
+        if state.get("result_type") == "factor_portfolio":
+            result = run_factor_portfolio(
+                state["validated_request"],
+                finnhub_api_key=finnhub_api_key,
+                analytics_source="chat",
+            )
+            factor_result = result.get("factor_portfolio_result") or result
+            result_sink = _RUNTIME_RESULTS.get()
+            if result_sink is not None:
+                result_sink["factor_portfolio_result"] = factor_result
+            return {
+                **state,
+                "status": "success",
+                "factor_portfolio_result": (
+                    summarize_output(factor_result)
+                    if result_sink is not None
+                    else factor_result
+                ),
+                "diagnostics": result.get("diagnostics") or {},
+                "warnings": [*state.get("warnings", []), *(result.get("warnings") or [])],
+            }
 
         result = run_backtest(
             state["validated_request"],
@@ -444,6 +546,14 @@ def format_response_node(state: AgentState) -> AgentState:
             else:
                 symbols = ", ".join(request.get("symbols") or [])
                 message = f"Portfolio optimization completed for {symbols}."
+            return {**state, "assistant_message": message}
+        if state.get("result_type") == "factor_portfolio":
+            request = state.get("validated_request", {})
+            if request.get("sector") and request.get("selection_mode") == "sector":
+                message = f"Factor portfolio construction completed for the {request.get('sector')} sector."
+            else:
+                symbols = ", ".join(request.get("symbols") or [])
+                message = f"Factor portfolio construction completed for {symbols}."
             return {**state, "assistant_message": message}
 
         strategy_label = _strategy_label(str(request.get("strategy", DEFAULTS["strategy"])))
@@ -532,6 +642,11 @@ def _normalize_request_type(parsed: dict[str, Any]) -> str:
     request_type = str(parsed.get("request_type") or "").strip().lower()
     if request_type in {"portfolio", "portfolio_optimizer", "markowitz", "markowitz_optimization"}:
         return "portfolio_optimization"
+    if request_type in {"factor_portfolio", "factor", "factor_ranked_portfolio", "factor_portfolio_optimization"}:
+        return "factor_portfolio"
+    text_hint = " ".join(str(parsed.get(key) or "") for key in ("request_type", "factor_model", "selection_method")).lower()
+    if "factor" in text_hint or parsed.get("factor_model"):
+        return "factor_portfolio"
     if request_type in {"strategy_backtest", "backtest", "strategy"}:
         return "strategy_backtest"
     if parsed.get("symbols") or parsed.get("sector") or parsed.get("objective") in {"max_sharpe", "min_volatility"}:
@@ -721,6 +836,78 @@ def _defaulted_portfolio_monte_carlo(raw_monte_carlo: Any) -> dict[str, Any]:
         else {}
     )
     return monte_carlo
+
+
+def _defaulted_factor_model(raw_factor_model: Any) -> dict[str, Any]:
+    defaults = FACTOR_PORTFOLIO_DEFAULTS["factor_model"]
+    factor_model = {**defaults, "weights": dict(defaults["weights"])}
+    if isinstance(raw_factor_model, dict):
+        factor_model.update({key: value for key, value in raw_factor_model.items() if value is not None})
+        if isinstance(raw_factor_model.get("weights"), dict):
+            factor_model["weights"].update(
+                {key: value for key, value in raw_factor_model["weights"].items() if value is not None}
+            )
+    factor_model["normalization_mode"] = (
+        str(factor_model.get("normalization_mode") or "sector").strip().lower()
+        if str(factor_model.get("normalization_mode") or "").strip().lower() in {"universe", "sector"}
+        else "sector"
+    )
+    factor_model["selection_method"] = _normalize_selection_method(factor_model.get("selection_method"))
+    factor_model["minimum_data_coverage_pct"] = _bounded_float_inclusive(
+        factor_model.get("minimum_data_coverage_pct"),
+        60.0,
+        0.0,
+        100.0,
+    )
+    factor_model["top_n"] = _bounded_int(factor_model.get("top_n"), 10, 1, 50)
+    factor_model["top_percentile"] = _bounded_float_inclusive(
+        factor_model.get("top_percentile"),
+        30.0,
+        1.0,
+        100.0,
+    )
+    factor_model["minimum_score"] = (
+        None
+        if factor_model.get("minimum_score") in (None, "")
+        else _bounded_float_inclusive(factor_model.get("minimum_score"), 65.0, 0.0, 100.0)
+    )
+    return factor_model
+
+
+def _defaulted_factor_optimization(raw_optimization: Any, raw_objective: Any = None) -> dict[str, Any]:
+    optimization = dict(FACTOR_PORTFOLIO_DEFAULTS["optimization"])
+    if isinstance(raw_optimization, dict):
+        optimization.update({key: value for key, value in raw_optimization.items() if value is not None})
+    if raw_objective is not None:
+        optimization["objective"] = _normalize_objective(raw_objective)
+    else:
+        optimization["objective"] = _normalize_objective(optimization.get("objective"))
+    method = str(optimization.get("expected_return_method") or "historical").strip().lower()
+    optimization["expected_return_method"] = method if method in {"historical", "factor_tilted"} else "historical"
+    optimization["minimum_weight"] = _bounded_float_inclusive(optimization.get("minimum_weight"), 0.0, 0.0, 1.0)
+    optimization["maximum_weight"] = _bounded_float_inclusive(optimization.get("maximum_weight"), 0.25, 0.05, 1.0)
+    optimization["risk_free_rate"] = _bounded_float_inclusive(optimization.get("risk_free_rate"), 0.04, 0.0, 0.25)
+    return optimization
+
+
+def _defaulted_score_tilt(raw_score_tilt: Any) -> dict[str, Any]:
+    score_tilt = dict(FACTOR_PORTFOLIO_DEFAULTS["score_tilt"])
+    if isinstance(raw_score_tilt, dict):
+        score_tilt.update({key: value for key, value in raw_score_tilt.items() if value is not None})
+    score_tilt["enabled"] = bool(score_tilt.get("enabled", False))
+    score_tilt["strength"] = _bounded_float_inclusive(score_tilt.get("strength"), 0.20, 0.0, 1.0)
+    score_tilt["maximum_adjustment_pct"] = _bounded_float_inclusive(
+        score_tilt.get("maximum_adjustment_pct"),
+        0.05,
+        0.0,
+        0.50,
+    )
+    return score_tilt
+
+
+def _normalize_selection_method(value: Any) -> str:
+    method = str(value or "top_n").strip().lower()
+    return method if method in {"top_n", "top_percentile", "minimum_score", "all_eligible"} else "top_n"
 
 
 def _normalize_lookback(value: Any) -> str:

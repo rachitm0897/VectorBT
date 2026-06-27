@@ -79,6 +79,50 @@ export type PortfolioOptimizationRequest = {
   monte_carlo?: PortfolioMonteCarloConfig;
 };
 
+export type FactorModelConfiguration = {
+  enabled: boolean;
+  normalization_mode: "universe" | "sector";
+  weights: {
+    fundamental_quality: number;
+    valuation: number;
+    momentum: number;
+    analyst: number;
+    financial_risk: number;
+  };
+  minimum_data_coverage_pct: number;
+  selection_method: "top_n" | "top_percentile" | "minimum_score" | "all_eligible";
+  top_n: number;
+  top_percentile: number;
+  minimum_score: number | null;
+};
+
+export type FactorPortfolioOptimizationConfig = {
+  objective: "max_sharpe" | "min_volatility";
+  minimum_weight: number;
+  maximum_weight: number;
+  risk_free_rate: number;
+  expected_return_method: "historical" | "factor_tilted";
+  num_frontier_portfolios?: number;
+};
+
+export type ScoreTiltConfig = {
+  enabled: boolean;
+  strength: number;
+  maximum_adjustment_pct: number;
+};
+
+export type FactorPortfolioRequest = {
+  symbols: string[];
+  sector?: string;
+  selection_mode: "symbols" | "sector";
+  lookback: "1mo" | "6mo" | "1y" | "2y" | "5y";
+  resolution: "D";
+  factor_model: FactorModelConfiguration;
+  optimization: FactorPortfolioOptimizationConfig;
+  score_tilt: ScoreTiltConfig;
+  monte_carlo: PortfolioMonteCarloConfig;
+};
+
 export type PortfolioMetrics = {
   expected_annual_return_pct?: number;
   annual_volatility_pct?: number;
@@ -197,6 +241,72 @@ export type PortfolioOptimizationResponse = {
   errors?: string[];
 };
 
+export type FactorScoreRow = {
+  ticker?: string;
+  company_name?: string;
+  sector?: string;
+  raw_factor_values?: Record<string, unknown>;
+  normalized_factor_scores?: Record<string, number | null>;
+  fundamental_quality_score?: number | null;
+  valuation_score?: number | null;
+  momentum_score?: number | null;
+  analyst_score?: number | null;
+  financial_risk_score?: number | null;
+  quantitative_alpha_score?: number | null;
+  combined_portfolio_score?: number | null;
+  data_coverage_pct?: number | null;
+  requested_factor_weights?: Record<string, number>;
+  effective_factor_weights?: Record<string, number>;
+  selection_status?: string;
+  selection_reason?: string;
+  expected_return_original?: number | null;
+  expected_return_adjusted?: number | null;
+  final_portfolio_weight?: number | null;
+};
+
+export type FactorPortfolioResult = {
+  status?: "success" | "error";
+  tool?: "construct_factor_portfolio" | string;
+  run_id?: string;
+  request_summary?: Record<string, unknown>;
+  universe_summary?: {
+    symbols_requested?: number;
+    symbols_scored?: number;
+    symbols_selected?: number;
+  };
+  factor_model_configuration?: Partial<FactorModelConfiguration> & Record<string, unknown>;
+  factor_scores?: FactorScoreRow[];
+  selected_stocks?: FactorScoreRow[];
+  rejected_stocks?: Array<{ ticker?: string; reason?: string }>;
+  optimization_result?: {
+    objective?: string;
+    weights?: Record<string, number>;
+    metrics?: PortfolioMetrics;
+    artifact_id?: string;
+    artifact_url?: string;
+  };
+  portfolio_weights?: Record<string, number>;
+  scenario_analysis?: PortfolioScenarioAnalysis | null;
+  scenario_charts?: Record<string, PortfolioScenarioChart>;
+  data_sources?: Record<string, unknown>;
+  calculation_timestamp?: string;
+  artifact_id?: string;
+  artifact_url?: string;
+  warnings?: string[];
+};
+
+export type FactorPortfolioResponse = {
+  status: "success" | "error";
+  message?: string;
+  assistant_message?: string;
+  parsed_request?: FactorPortfolioRequest | Record<string, unknown>;
+  result_type?: "factor_portfolio" | string;
+  factor_portfolio_result?: FactorPortfolioResult;
+  diagnostics?: Record<string, unknown>;
+  warnings?: string[];
+  errors?: string[];
+};
+
 export type MetricSet = {
   total_return_pct?: number;
   buy_hold_return_pct?: number;
@@ -285,6 +395,7 @@ export type ChatResponse = {
   result_type?: "strategy_backtest" | "portfolio_optimization" | string;
   backtest_result?: BacktestResult;
   portfolio_result?: PortfolioResult;
+  factor_portfolio_result?: FactorPortfolioResult;
   diagnostics?: Record<string, unknown>;
   warnings?: string[];
   errors?: string[];
@@ -494,6 +605,35 @@ export async function runPortfolioOptimization(
   if (!response.ok || data.status === "error") {
     const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
     throw new Error(`${data.assistant_message || data.message || "Portfolio optimization failed."}${details}`);
+  }
+
+  return data;
+}
+
+export async function runFactorPortfolio(
+  payload: FactorPortfolioRequest,
+  apiKeys?: ApiKeys,
+): Promise<FactorPortfolioResponse> {
+  const response = await fetch(buildApiUrl("/portfolio/factor/"), {
+    method: "POST",
+    headers: buildFinnhubRequestHeaders(apiKeys),
+    body: JSON.stringify({ ...payload, ...buildConfigPayload(apiKeys, false) }),
+  });
+
+  let data: FactorPortfolioResponse | null = null;
+  try {
+    data = (await response.json()) as FactorPortfolioResponse;
+  } catch {
+    data = null;
+  }
+
+  if (!data) {
+    throw new Error("Backend returned an empty factor portfolio response.");
+  }
+
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.assistant_message || data.message || "Factor portfolio construction failed."}${details}`);
   }
 
   return data;

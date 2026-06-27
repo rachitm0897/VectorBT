@@ -11,7 +11,8 @@ from apps.backtesting.mcp_client import (
     get_mcp_status,
 )
 from apps.backtesting.engine import BacktestExecutionError, run_backtest, run_portfolio_optimization
-from apps.backtesting.serializers import BacktestRequestSerializer, PortfolioOptimizationRequestSerializer
+from apps.backtesting.engine import run_factor_portfolio
+from apps.backtesting.serializers import BacktestRequestSerializer, FactorPortfolioRequestSerializer, PortfolioOptimizationRequestSerializer
 from apps.market_data.finnhub import MarketDataError
 from apps.strategies.registry import StrategyValidationError
 
@@ -91,6 +92,43 @@ class PortfolioOptimizeAPIView(APIView):
             return _error_response(
                 "Portfolio optimization failed unexpectedly.",
                 "portfolio_optimization_failed",
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class FactorPortfolioAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        serializer = FactorPortfolioRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "status": "error",
+                    "assistant_message": "Invalid factor portfolio request.",
+                    "parsed_request": {},
+                    "factor_portfolio_result": {},
+                    "errors": _serializer_errors(serializer.errors),
+                    "warnings": [],
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        api_keys = api_keys_from_request(request)
+        try:
+            result = run_factor_portfolio(
+                serializer.validated_data,
+                finnhub_api_key=api_keys.finnhub_api_key,
+            )
+        except BacktestExecutionError as exc:
+            return _error_response(str(exc), exc.code, status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return _error_response(
+                "Factor portfolio construction failed unexpectedly.",
+                "factor_portfolio_failed",
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

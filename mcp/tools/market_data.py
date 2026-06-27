@@ -11,6 +11,10 @@ from tools.cache import cache_dir, cache_key, read_json, write_json
 
 
 FINNHUB_CANDLES_URL = "https://finnhub.io/api/v1/stock/candle"
+FINNHUB_PROFILE_URL = "https://finnhub.io/api/v1/stock/profile2"
+FINNHUB_METRIC_URL = "https://finnhub.io/api/v1/stock/metric"
+FINNHUB_RECOMMENDATION_URL = "https://finnhub.io/api/v1/stock/recommendation"
+FINNHUB_EARNINGS_URL = "https://finnhub.io/api/v1/stock/earnings"
 SUPPORTED_LOOKBACKS = {
     "1mo": 31,
     "6mo": 183,
@@ -55,6 +59,11 @@ def _timestamp_range(lookback: str) -> tuple[int, int]:
 def _cache_path(symbol: str, resolution: str, start_ts: int, end_ts: int):
     key = cache_key(symbol, resolution, start_ts, end_ts)
     return cache_dir("market_data") / f"{symbol}_{resolution}_{start_ts}_{end_ts}_{key}.json"
+
+
+def _provider_cache_path(provider: str, symbol: str, *parts: Any):
+    key = cache_key(provider, symbol, *parts)
+    return cache_dir("fundamentals") / f"{provider}_{symbol}_{key}.json"
 
 
 def _payload_to_frame(payload: dict[str, Any]) -> pd.DataFrame:
@@ -174,3 +183,94 @@ def fetch_finnhub_candles(
         api_key=api_key,
     )
     return df
+
+
+def fetch_finnhub_company_profile(symbol: str, api_key: str | None = None) -> dict[str, Any]:
+    return _fetch_finnhub_json(
+        "profile",
+        FINNHUB_PROFILE_URL,
+        normalize_symbol(symbol),
+        {"symbol": normalize_symbol(symbol)},
+        api_key=api_key,
+    )
+
+
+def fetch_finnhub_basic_financials(symbol: str, api_key: str | None = None) -> dict[str, Any]:
+    return _fetch_finnhub_json(
+        "metrics",
+        FINNHUB_METRIC_URL,
+        normalize_symbol(symbol),
+        {"symbol": normalize_symbol(symbol), "metric": "all"},
+        api_key=api_key,
+    )
+
+
+def fetch_finnhub_recommendations(symbol: str, api_key: str | None = None) -> list[dict[str, Any]]:
+    payload = _fetch_finnhub_json(
+        "recommendations",
+        FINNHUB_RECOMMENDATION_URL,
+        normalize_symbol(symbol),
+        {"symbol": normalize_symbol(symbol)},
+        api_key=api_key,
+    )
+    return payload if isinstance(payload, list) else []
+
+
+def fetch_finnhub_earnings(symbol: str, api_key: str | None = None) -> list[dict[str, Any]]:
+    payload = _fetch_finnhub_json(
+        "earnings",
+        FINNHUB_EARNINGS_URL,
+        normalize_symbol(symbol),
+        {"symbol": normalize_symbol(symbol)},
+        api_key=api_key,
+    )
+    return payload if isinstance(payload, list) else []
+
+
+def fetch_finnhub_factor_data(symbol: str, api_key: str | None = None) -> dict[str, Any]:
+    warnings: list[str] = []
+    data: dict[str, Any] = {}
+    for key, fetcher in (
+        ("profile", fetch_finnhub_company_profile),
+        ("metrics", fetch_finnhub_basic_financials),
+        ("recommendations", fetch_finnhub_recommendations),
+        ("earnings", fetch_finnhub_earnings),
+    ):
+        try:
+            data[key] = fetcher(symbol, api_key=api_key)
+        except ValueError as exc:
+            warnings.append(f"{key}_unavailable:{exc}")
+            data[key] = [] if key in {"recommendations", "earnings"} else {}
+    data["warnings"] = warnings
+    return data
+
+
+def _fetch_finnhub_json(
+    provider: str,
+    url: str,
+    symbol: str,
+    params: dict[str, Any],
+    api_key: str | None = None,
+) -> Any:
+    api_key = (api_key or os.getenv("FINNHUB_API_KEY") or "").strip()
+    if not api_key:
+        raise ValueError("Finnhub API key is required.")
+
+    path = _provider_cache_path(provider, symbol, *sorted(params.items()))
+    cached = read_json(path)
+    if cached and "payload" in cached:
+        return cached["payload"]
+
+    try:
+        response = requests.get(url, params={**params, "token": api_key}, timeout=30)
+    except requests.RequestException as exc:
+        raise ValueError("Finnhub request failed due to a network or connection error.") from exc
+    if response.status_code >= 400:
+        raise ValueError(f"Finnhub request failed with HTTP {response.status_code}.")
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise ValueError("Finnhub returned a response that was not valid JSON.") from exc
+    write_json(path, {"provider": provider, "symbol": symbol, "params": params, "payload": payload})
+    return payload

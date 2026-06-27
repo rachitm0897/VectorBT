@@ -105,7 +105,7 @@ MCP_DEFAULT_TOOL = os.getenv("MCP_DEFAULT_TOOL", "run_strategy_research")
 MCP_ALLOWED_TOOLS = set(
     env_list(
         "MCP_ALLOWED_TOOLS",
-        "run_strategy_research,run_markowitz_optimization,list_strategies,get_strategy_schema,list_indicators,get_indicator_info,list_stock_universe,list_sectors,list_stocks_by_sector,resolve_symbols_for_sector",
+        "run_strategy_research,run_markowitz_optimization,construct_factor_portfolio,list_strategies,get_strategy_schema,list_indicators,get_indicator_info,list_stock_universe,list_sectors,list_stocks_by_sector,resolve_symbols_for_sector",
     )
 )
 

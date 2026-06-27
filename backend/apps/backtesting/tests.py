@@ -4,9 +4,10 @@ from django.test import SimpleTestCase, override_settings
 
 from apps.backtesting.mcp_client import (
     discover_remote_research_name,
+    run_remote_factor_portfolio,
     run_remote_portfolio_optimization,
 )
-from apps.backtesting.serializers import PortfolioOptimizationRequestSerializer
+from apps.backtesting.serializers import FactorPortfolioRequestSerializer, PortfolioOptimizationRequestSerializer
 
 
 class PortfolioMCPClientTests(SimpleTestCase):
@@ -272,3 +273,66 @@ class MCPDiscoveryTests(SimpleTestCase):
 
         self.assertEqual(result["kind"], "strategy")
         call_mcp_tool.assert_called_once_with("list_strategies", {})
+
+
+class FactorPortfolioMCPClientTests(SimpleTestCase):
+    @override_settings(MCP_ALLOWED_TOOLS={"construct_factor_portfolio"})
+    @patch("apps.backtesting.mcp_client.call_mcp_tool")
+    def test_factor_portfolio_routes_to_mcp_without_chat_key(self, call_mcp_tool):
+        call_mcp_tool.return_value = {
+            "status": "success",
+            "run_id": "factor_test",
+            "factor_scores": [],
+            "selected_stocks": [],
+            "rejected_stocks": [],
+            "optimization_result": {"metrics": {}},
+            "portfolio_weights": {},
+        }
+
+        run_remote_factor_portfolio(
+            {
+                "symbols": ["AAPL", "MSFT"],
+                "selection_mode": "symbols",
+                "lookback": "2y",
+                "resolution": "D",
+                "factor_model": {
+                    "weights": {
+                        "fundamental_quality": 0.3,
+                        "valuation": 0.2,
+                        "momentum": 0.2,
+                        "analyst": 0.15,
+                        "financial_risk": 0.15,
+                    }
+                },
+                "optimization": {"objective": "max_sharpe"},
+                "score_tilt": {"enabled": False},
+                "monte_carlo": {"enabled": True},
+            },
+            finnhub_api_key="finnhub-key",
+        )
+
+        tool_name, arguments = call_mcp_tool.call_args.args
+        self.assertEqual(tool_name, "construct_factor_portfolio")
+        self.assertEqual(arguments["finnhub_api_key"], "finnhub-key")
+        self.assertNotIn("chat_api_key", arguments)
+        self.assertNotIn("openai_api_key", arguments)
+        self.assertNotIn("model", arguments)
+
+    def test_factor_serializer_rejects_invalid_weights(self):
+        serializer = FactorPortfolioRequestSerializer(
+            data={
+                "symbols": ["AAPL", "MSFT"],
+                "factor_model": {
+                    "weights": {
+                        "fundamental_quality": 0.8,
+                        "valuation": 0.2,
+                        "momentum": 0.2,
+                        "analyst": 0.15,
+                        "financial_risk": 0.15,
+                    }
+                },
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("invalid_factor_weights", str(serializer.errors))

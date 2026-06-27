@@ -256,6 +256,84 @@ def persist_portfolio_optimization_result(result: dict, source: str = "api") -> 
         logger.warning("Analytics portfolio persistence failed: %s", _safe_error(exc))
 
 
+def persist_factor_portfolio_result(result: dict, source: str = "api") -> None:
+    if not analytics_enabled() or not isinstance(result, dict):
+        return
+
+    try:
+        request = result.get("_analytics_request") if isinstance(result.get("_analytics_request"), dict) else {}
+        factor_result = result.get("factor_portfolio_result") if isinstance(result.get("factor_portfolio_result"), dict) else result
+        universe = factor_result.get("universe_summary") if isinstance(factor_result.get("universe_summary"), dict) else {}
+        config = factor_result.get("factor_model_configuration") if isinstance(factor_result.get("factor_model_configuration"), dict) else {}
+        optimization = factor_result.get("optimization_result") if isinstance(factor_result.get("optimization_result"), dict) else {}
+        metrics = optimization.get("metrics") if isinstance(optimization.get("metrics"), dict) else {}
+        scenario = factor_result.get("scenario_analysis") if isinstance(factor_result.get("scenario_analysis"), dict) else {}
+        scenario_summary = {
+            "config": {
+                "days": scenario.get("days"),
+                "simulations": scenario.get("simulations"),
+                "block_size": scenario.get("block_size"),
+                "seed": scenario.get("seed"),
+            },
+            "scenarios": scenario.get("scenarios") if isinstance(scenario.get("scenarios"), list) else [],
+        }
+        run_id = (
+            safe_str(result.get("run_id"), 128)
+            or safe_str(factor_result.get("run_id"), 128)
+            or safe_str(factor_result.get("artifact_id"), 128)
+            or f"fp_{uuid.uuid4().hex[:12]}"
+        )
+        selected = factor_result.get("selected_stocks") if isinstance(factor_result.get("selected_stocks"), list) else []
+        scores = factor_result.get("factor_scores") if isinstance(factor_result.get("factor_scores"), list) else []
+        row = {
+            "run_id": run_id,
+            "status": safe_str(result.get("status") or factor_result.get("status") or "success", 32),
+            "selection_mode": safe_str(request.get("selection_mode") or (factor_result.get("request_summary") or {}).get("selection_mode"), 64),
+            "sector": safe_str(request.get("sector") or (factor_result.get("request_summary") or {}).get("sector"), 128),
+            "symbols_requested": safe_int(universe.get("symbols_requested")),
+            "symbols_scored": safe_int(universe.get("symbols_scored")),
+            "symbols_selected": safe_int(universe.get("symbols_selected")),
+            "factor_configuration": _jsonb(config),
+            "normalization_mode": safe_str(config.get("normalization_mode"), 64),
+            "selection_method": safe_str(config.get("selection_method"), 64),
+            "top_n": safe_int(config.get("top_n")),
+            "minimum_score": safe_float(config.get("minimum_score")),
+            "minimum_data_coverage_pct": safe_float(config.get("minimum_data_coverage_pct")),
+            "optimization_objective": safe_str(optimization.get("objective") or (request.get("optimization") or {}).get("objective"), 64),
+            "expected_return_method": safe_str((request.get("optimization") or {}).get("expected_return_method"), 64),
+            "expected_annual_return_pct": safe_float(metrics.get("expected_annual_return_pct")),
+            "annual_volatility_pct": safe_float(metrics.get("annual_volatility_pct")),
+            "sharpe_ratio": safe_float(metrics.get("sharpe_ratio")),
+            "scenario_summary": _jsonb(scenario_summary),
+            "warnings": _jsonb(factor_result.get("warnings") if isinstance(factor_result.get("warnings"), list) else []),
+            "runtime_ms": None,
+        }
+
+        with get_analytics_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(_FACTOR_PORTFOLIO_RUN_UPSERT_SQL, _factor_portfolio_row_values(row))
+                cursor.execute("DELETE FROM stock_factor_scores WHERE run_id = %s", (run_id,))
+                score_rows = list(_stock_factor_score_rows(run_id, scores, selected))
+                if score_rows:
+                    cursor.executemany(
+                        """
+                        INSERT INTO stock_factor_scores (
+                            run_id, ticker, company_name, sector,
+                            fundamental_quality_score, valuation_score, momentum_score,
+                            analyst_score, financial_risk_score, quantitative_alpha_score,
+                            combined_portfolio_score, data_coverage_pct, selection_status,
+                            selection_reason, expected_return_original, expected_return_adjusted,
+                            final_portfolio_weight, raw_values_json, normalized_scores_json,
+                            effective_weights_json
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        score_rows,
+                    )
+    except Exception as exc:
+        logger.warning("Analytics factor portfolio persistence failed: %s", _safe_error(exc))
+
+
 def persist_mcp_tool_call(event: dict) -> None:
     if not analytics_enabled() or not isinstance(event, dict):
         return
@@ -388,6 +466,10 @@ def _portfolio_row_values(row: dict[str, Any]) -> tuple[Any, ...]:
     return tuple(row[column] for column in _PORTFOLIO_COLUMNS)
 
 
+def _factor_portfolio_row_values(row: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(row[column] for column in _FACTOR_PORTFOLIO_COLUMNS)
+
+
 def _parameter_rows(run_id: str, parameters: Any):
     if not isinstance(parameters, dict):
         return
@@ -453,6 +535,41 @@ def _equity_rows(run_id: str, charts: dict[str, Any]):
 def _portfolio_weight_rows(run_id: str, weights: dict[str, Any]):
     for ticker, weight in sorted(weights.items()):
         yield (run_id, safe_str(ticker, 32), None, None, safe_float(weight))
+
+
+def _stock_factor_score_rows(run_id: str, scores: list[Any], selected: list[Any]):
+    selected_by_ticker = {
+        safe_str(item.get("ticker"), 32): item
+        for item in selected
+        if isinstance(item, dict) and safe_str(item.get("ticker"), 32)
+    }
+    for item in scores:
+        if not isinstance(item, dict):
+            continue
+        ticker = safe_str(item.get("ticker"), 32)
+        detail = selected_by_ticker.get(ticker, item) if ticker else item
+        yield (
+            run_id,
+            ticker,
+            safe_str(item.get("company_name"), 256),
+            safe_str(item.get("sector"), 128),
+            safe_float(item.get("fundamental_quality_score")),
+            safe_float(item.get("valuation_score")),
+            safe_float(item.get("momentum_score")),
+            safe_float(item.get("analyst_score")),
+            safe_float(item.get("financial_risk_score")),
+            safe_float(item.get("quantitative_alpha_score")),
+            safe_float(item.get("combined_portfolio_score")),
+            safe_float(item.get("data_coverage_pct")),
+            safe_str(item.get("selection_status"), 32),
+            safe_str(item.get("selection_reason"), 512),
+            safe_float(item.get("expected_return_original")),
+            safe_float(item.get("expected_return_adjusted")),
+            safe_float(item.get("final_portfolio_weight")),
+            _jsonb(detail.get("raw_factor_values") if isinstance(detail.get("raw_factor_values"), dict) else {}),
+            _jsonb(detail.get("normalized_factor_scores") if isinstance(detail.get("normalized_factor_scores"), dict) else {}),
+            _jsonb(detail.get("effective_factor_weights") if isinstance(detail.get("effective_factor_weights"), dict) else {}),
+        )
 
 
 def _compact_portfolio_result(portfolio_result: dict[str, Any]) -> dict[str, Any]:
@@ -696,4 +813,54 @@ ON CONFLICT (run_id) DO UPDATE SET
     request_json = EXCLUDED.request_json,
     result_json = EXCLUDED.result_json,
     diagnostics_json = EXCLUDED.diagnostics_json
+"""
+
+_FACTOR_PORTFOLIO_COLUMNS = (
+    "run_id",
+    "status",
+    "selection_mode",
+    "sector",
+    "symbols_requested",
+    "symbols_scored",
+    "symbols_selected",
+    "factor_configuration",
+    "normalization_mode",
+    "selection_method",
+    "top_n",
+    "minimum_score",
+    "minimum_data_coverage_pct",
+    "optimization_objective",
+    "expected_return_method",
+    "expected_annual_return_pct",
+    "annual_volatility_pct",
+    "sharpe_ratio",
+    "scenario_summary",
+    "warnings",
+    "runtime_ms",
+)
+
+_FACTOR_PORTFOLIO_RUN_UPSERT_SQL = f"""
+INSERT INTO factor_portfolio_runs ({", ".join(_FACTOR_PORTFOLIO_COLUMNS)})
+VALUES ({", ".join(["%s"] * len(_FACTOR_PORTFOLIO_COLUMNS))})
+ON CONFLICT (run_id) DO UPDATE SET
+    status = EXCLUDED.status,
+    selection_mode = EXCLUDED.selection_mode,
+    sector = EXCLUDED.sector,
+    symbols_requested = EXCLUDED.symbols_requested,
+    symbols_scored = EXCLUDED.symbols_scored,
+    symbols_selected = EXCLUDED.symbols_selected,
+    factor_configuration = EXCLUDED.factor_configuration,
+    normalization_mode = EXCLUDED.normalization_mode,
+    selection_method = EXCLUDED.selection_method,
+    top_n = EXCLUDED.top_n,
+    minimum_score = EXCLUDED.minimum_score,
+    minimum_data_coverage_pct = EXCLUDED.minimum_data_coverage_pct,
+    optimization_objective = EXCLUDED.optimization_objective,
+    expected_return_method = EXCLUDED.expected_return_method,
+    expected_annual_return_pct = EXCLUDED.expected_annual_return_pct,
+    annual_volatility_pct = EXCLUDED.annual_volatility_pct,
+    sharpe_ratio = EXCLUDED.sharpe_ratio,
+    scenario_summary = EXCLUDED.scenario_summary,
+    warnings = EXCLUDED.warnings,
+    runtime_ms = EXCLUDED.runtime_ms
 """

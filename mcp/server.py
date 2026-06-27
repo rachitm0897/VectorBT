@@ -21,8 +21,10 @@ from tools.formatting import (
 )
 from tools.market_data import fetch_finnhub_candles_with_metadata
 from tools.monte_carlo import run_bootstrap_monte_carlo
+from tools.factor_scoring import construct_factor_portfolio_core
 from tools.portfolio_optimization import run_markowitz_optimization_core
 from tools.schemas import (
+    FactorPortfolioRequest,
     IndicatorBatchRequest,
     IndicatorRequest,
     MarkowitzOptimizationRequest,
@@ -30,6 +32,7 @@ from tools.schemas import (
     MonteCarloRequest,
     StrategyBacktestRequest,
     StrategyResearchRequest,
+    model_to_dict,
     parse_request,
 )
 from tools.strategies import generate_strategy_signals, list_strategy_definitions, strategy_schema
@@ -719,6 +722,59 @@ def run_markowitz_optimization(
         return _error_response(str(exc), ["runtime_error"])
     except Exception as exc:
         return _unexpected_error_response("portfolio optimization", exc)
+
+
+@mcp.tool()
+@traced_tool()
+def construct_factor_portfolio(
+    symbols: list[str] | None = None,
+    sector: str | None = None,
+    selection_mode: str = "symbols",
+    lookback: str = "2y",
+    resolution: str = "D",
+    factor_model: dict[str, Any] | None = None,
+    optimization: dict[str, Any] | None = None,
+    score_tilt: dict[str, Any] | None = None,
+    monte_carlo: dict[str, Any] | None = None,
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    """Construct a factor-ranked portfolio, then run Markowitz optimization and scenarios."""
+    try:
+        request = parse_request(
+            FactorPortfolioRequest,
+            {
+                "symbols": symbols,
+                "sector": sector,
+                "selection_mode": selection_mode,
+                "lookback": lookback,
+                "resolution": resolution,
+                "factor_model": factor_model or {},
+                "optimization": optimization or {},
+                "score_tilt": score_tilt or {},
+                "monte_carlo": monte_carlo or {},
+                "finnhub_api_key": finnhub_api_key,
+            },
+        )
+        return construct_factor_portfolio_core(
+            symbols=request.symbols,
+            sector=request.sector,
+            selection_mode=request.selection_mode,
+            lookback=request.lookback,
+            resolution=request.resolution,
+            factor_model=model_to_dict(request.factor_model),
+            optimization=model_to_dict(request.optimization),
+            score_tilt=model_to_dict(request.score_tilt),
+            monte_carlo=model_to_dict(request.monte_carlo),
+            finnhub_api_key=request.finnhub_api_key,
+        )
+    except ValidationError as exc:
+        return _validation_error_response(exc)
+    except ValueError as exc:
+        return _value_error_response(exc, "factor_portfolio_error")
+    except RuntimeError as exc:
+        return _error_response(str(exc), ["runtime_error"])
+    except Exception as exc:
+        return _unexpected_error_response("factor portfolio construction", exc)
 
 
 def _scenario_override_dict(override: Any) -> dict[str, Any]:

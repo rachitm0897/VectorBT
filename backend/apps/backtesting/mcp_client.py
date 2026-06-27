@@ -139,6 +139,16 @@ def run_remote_portfolio_optimization(
     return _portfolio_backend_response(compact, arguments)
 
 
+def run_remote_factor_portfolio(
+    validated_request: dict[str, Any],
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    arguments = _factor_tool_arguments(validated_request, finnhub_api_key)
+    compact = call_mcp_tool("construct_factor_portfolio", arguments)
+    _raise_for_tool_error(compact)
+    return _factor_backend_response(compact, arguments)
+
+
 def fetch_remote_sectors() -> dict[str, Any]:
     compact = call_mcp_tool("list_sectors", {})
     _raise_for_tool_error(compact)
@@ -310,6 +320,23 @@ def _portfolio_tool_arguments(validated_request: dict[str, Any], finnhub_api_key
     return arguments
 
 
+def _factor_tool_arguments(validated_request: dict[str, Any], finnhub_api_key: str | None) -> dict[str, Any]:
+    arguments = {
+        "symbols": list(validated_request.get("symbols") or []),
+        "sector": validated_request.get("sector") or None,
+        "selection_mode": validated_request.get("selection_mode", "symbols"),
+        "lookback": validated_request.get("lookback", "2y"),
+        "resolution": validated_request.get("resolution", "D"),
+        "factor_model": validated_request.get("factor_model") if isinstance(validated_request.get("factor_model"), dict) else {},
+        "optimization": validated_request.get("optimization") if isinstance(validated_request.get("optimization"), dict) else {},
+        "score_tilt": validated_request.get("score_tilt") if isinstance(validated_request.get("score_tilt"), dict) else {},
+        "monte_carlo": validated_request.get("monte_carlo") if isinstance(validated_request.get("monte_carlo"), dict) else {},
+    }
+    if finnhub_api_key:
+        arguments["finnhub_api_key"] = finnhub_api_key
+    return arguments
+
+
 def _backend_response(compact: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
     warnings = list(compact.get("warnings") or [])
     artifact = _load_artifact(compact, warnings)
@@ -432,6 +459,79 @@ def _portfolio_backend_response(compact: dict[str, Any], arguments: dict[str, An
                 "artifact_url": compact.get("artifact_url"),
                 "artifact_path": compact.get("artifact_path"),
                 "data_quality": compact.get("data_quality"),
+            }
+        },
+        "warnings": warnings,
+        "errors": [],
+    }
+
+
+def _factor_backend_response(compact: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    warnings = list(compact.get("warnings") or [])
+    artifact = _load_artifact(compact, warnings)
+    artifact = artifact if isinstance(artifact, dict) else {}
+    factor_scores = artifact.get("factor_scores") if isinstance(artifact.get("factor_scores"), list) else compact.get("factor_scores")
+    selected_stocks = artifact.get("selected_stocks") if isinstance(artifact.get("selected_stocks"), list) else compact.get("selected_stocks")
+    rejected_stocks = artifact.get("rejected_stocks") if isinstance(artifact.get("rejected_stocks"), list) else compact.get("rejected_stocks")
+    optimization_result = (
+        artifact.get("optimization_result")
+        if isinstance(artifact.get("optimization_result"), dict)
+        else compact.get("optimization_result")
+    )
+    optimization_artifact = (
+        _load_artifact(optimization_result, warnings)
+        if isinstance(optimization_result, dict) and (
+            optimization_result.get("artifact_path") or optimization_result.get("artifact_url") or optimization_result.get("artifact_id")
+        )
+        else None
+    )
+    optimization_artifact = optimization_artifact if isinstance(optimization_artifact, dict) else {}
+    result = {
+        "status": "success",
+        "tool": "construct_factor_portfolio",
+        "run_id": compact.get("run_id"),
+        "request_summary": compact.get("request_summary") if isinstance(compact.get("request_summary"), dict) else {},
+        "universe_summary": compact.get("universe_summary") if isinstance(compact.get("universe_summary"), dict) else {},
+        "factor_model_configuration": compact.get("factor_model_configuration") if isinstance(compact.get("factor_model_configuration"), dict) else {},
+        "factor_scores": factor_scores if isinstance(factor_scores, list) else [],
+        "selected_stocks": selected_stocks if isinstance(selected_stocks, list) else [],
+        "rejected_stocks": rejected_stocks if isinstance(rejected_stocks, list) else [],
+        "optimization_result": optimization_result if isinstance(optimization_result, dict) else {},
+        "portfolio_weights": compact.get("portfolio_weights") if isinstance(compact.get("portfolio_weights"), dict) else {},
+        "scenario_analysis": compact.get("scenario_analysis") if isinstance(compact.get("scenario_analysis"), dict) else None,
+        "scenario_charts": _portfolio_scenario_chart_data(optimization_artifact),
+        "data_sources": compact.get("data_sources") if isinstance(compact.get("data_sources"), dict) else {},
+        "calculation_timestamp": compact.get("calculation_timestamp"),
+        "artifact_id": compact.get("artifact_id"),
+        "artifact_url": compact.get("artifact_url"),
+        "warnings": warnings,
+    }
+    return {
+        "status": "success",
+        "assistant_message": "Factor portfolio construction completed.",
+        "parsed_request": {
+            "request_type": "factor_portfolio",
+            "symbols": arguments.get("symbols") or [],
+            "sector": arguments.get("sector"),
+            "selection_mode": arguments.get("selection_mode"),
+            "lookback": arguments.get("lookback"),
+            "resolution": arguments.get("resolution"),
+            "factor_model": arguments.get("factor_model") or {},
+            "optimization": arguments.get("optimization") or {},
+            "score_tilt": arguments.get("score_tilt") or {},
+            "monte_carlo": arguments.get("monte_carlo") or {},
+        },
+        "result_type": "factor_portfolio",
+        "factor_portfolio_result": result,
+        "diagnostics": {
+            "mcp": {
+                "enabled": True,
+                "transport": _public_transport(settings.MCP_TRANSPORT),
+                "server_url": settings.MCP_SERVER_URL,
+                "tool": "construct_factor_portfolio",
+                "artifact_id": compact.get("artifact_id"),
+                "artifact_url": compact.get("artifact_url"),
+                "artifact_path": compact.get("artifact_path"),
             }
         },
         "warnings": warnings,
@@ -616,6 +716,8 @@ def _mcp_tool_event(
 
 
 def _request_type_for_tool(tool_name: str) -> str | None:
+    if tool_name == "construct_factor_portfolio":
+        return "factor_portfolio"
     if tool_name == "run_markowitz_optimization":
         return "portfolio_optimization"
     if tool_name in {"run_strategy_research", "run_strategy_backtest"}:

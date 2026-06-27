@@ -12,6 +12,23 @@ PORTFOLIO_MONTE_CARLO_DEFAULTS = {
     "scenarios": list(PORTFOLIO_SCENARIOS),
     "scenario_overrides": {},
 }
+FACTOR_GROUPS = ("fundamental_quality", "valuation", "momentum", "analyst", "financial_risk")
+FACTOR_DEFAULTS = {
+    "enabled": True,
+    "normalization_mode": "sector",
+    "weights": {
+        "fundamental_quality": 0.30,
+        "valuation": 0.20,
+        "momentum": 0.20,
+        "analyst": 0.15,
+        "financial_risk": 0.15,
+    },
+    "minimum_data_coverage_pct": 60.0,
+    "selection_method": "top_n",
+    "top_n": 10,
+    "top_percentile": 30.0,
+    "minimum_score": None,
+}
 
 
 class MonteCarloSerializer(serializers.Serializer):
@@ -92,6 +109,68 @@ class PortfolioOptimizationRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError({"symbols": "At least two symbols are required."})
         if not symbols and not sector:
             raise serializers.ValidationError("Provide either symbols or a sector for portfolio optimization.")
+        return attrs
+
+
+class FactorPortfolioRequestSerializer(serializers.Serializer):
+    symbols = serializers.ListField(
+        child=serializers.CharField(max_length=32),
+        max_length=50,
+        required=False,
+        default=list,
+        allow_empty=True,
+    )
+    sector = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    selection_mode = serializers.ChoiceField(choices=["symbols", "sector"], required=False, default="symbols")
+    lookback = serializers.ChoiceField(choices=["1mo", "6mo", "1y", "2y", "5y"], required=False, default="2y")
+    resolution = serializers.ChoiceField(choices=["D"], required=False, default="D")
+    factor_model = serializers.DictField(required=False, default=dict)
+    optimization = serializers.DictField(required=False, default=dict)
+    score_tilt = serializers.DictField(required=False, default=dict)
+    monte_carlo = serializers.DictField(required=False, default=dict)
+
+    def validate_symbols(self, value: list[str]) -> list[str]:
+        return PortfolioOptimizationRequestSerializer().validate_symbols(value)
+
+    def validate_factor_model(self, value) -> dict:
+        return _normalize_factor_model(value if isinstance(value, dict) else {})
+
+    def validate_optimization(self, value) -> dict:
+        raw = value if isinstance(value, dict) else {}
+        method = str(raw.get("expected_return_method") or "historical").strip().lower()
+        if method not in {"historical", "factor_tilted"}:
+            raise serializers.ValidationError("invalid_expected_return_method")
+        objective = str(raw.get("objective") or "max_sharpe").strip().lower()
+        if objective not in {"max_sharpe", "min_volatility"}:
+            raise serializers.ValidationError("invalid_objective")
+        return {
+            "objective": objective,
+            "minimum_weight": _float_range(raw.get("minimum_weight"), 0.0, 0.0, 1.0, "invalid_minimum_weight"),
+            "maximum_weight": _float_range(raw.get("maximum_weight"), 0.25, 0.05, 1.0, "invalid_maximum_weight"),
+            "risk_free_rate": _float_range(raw.get("risk_free_rate"), 0.04, 0.0, 0.25, "invalid_risk_free_rate"),
+            "expected_return_method": method,
+            "num_frontier_portfolios": _int_range(raw.get("num_frontier_portfolios"), 3000, 100, 10000, "invalid_num_frontier_portfolios"),
+        }
+
+    def validate_score_tilt(self, value) -> dict:
+        raw = value if isinstance(value, dict) else {}
+        return {
+            "enabled": bool(raw.get("enabled", False)),
+            "strength": _float_range(raw.get("strength"), 0.20, 0.0, 1.0, "invalid_score_tilt_strength"),
+            "maximum_adjustment_pct": _float_range(raw.get("maximum_adjustment_pct"), 0.05, 0.0, 0.50, "invalid_score_tilt_cap"),
+        }
+
+    def validate_monte_carlo(self, value) -> dict:
+        return _normalize_portfolio_monte_carlo(value)
+
+    def validate(self, attrs):
+        symbols = attrs.get("symbols") or []
+        sector = str(attrs.get("sector") or "").strip()
+        attrs["sector"] = sector
+        if attrs.get("selection_mode") == "sector" and not sector:
+            raise serializers.ValidationError({"sector": "Sector is required for sector selection."})
+        if attrs.get("selection_mode") != "sector" and len(symbols) < 2:
+            raise serializers.ValidationError({"symbols": "At least two symbols are required."})
         return attrs
 
 
@@ -182,3 +261,52 @@ def _validated_scenario_overrides(value) -> dict:
         if cleaned:
             overrides[name] = cleaned
     return overrides
+
+
+def _normalize_factor_model(raw: dict) -> dict:
+    config = {**FACTOR_DEFAULTS, "weights": dict(FACTOR_DEFAULTS["weights"])}
+    config.update({key: value for key, value in raw.items() if value is not None})
+    mode = str(config.get("normalization_mode") or "sector").strip().lower()
+    if mode not in {"universe", "sector"}:
+        raise serializers.ValidationError("invalid_normalization_mode")
+    method = str(config.get("selection_method") or "top_n").strip().lower()
+    if method not in {"top_n", "top_percentile", "minimum_score", "all_eligible"}:
+        raise serializers.ValidationError("invalid_selection_method")
+    weights = config.get("weights") if isinstance(config.get("weights"), dict) else {}
+    parsed_weights = {group: _float_value(weights.get(group), FACTOR_DEFAULTS["weights"][group]) for group in FACTOR_GROUPS}
+    if any(value < 0 for value in parsed_weights.values()) or abs(sum(parsed_weights.values()) - 1.0) > 1e-6:
+        raise serializers.ValidationError("invalid_factor_weights")
+    return {
+        "enabled": bool(config.get("enabled", True)),
+        "normalization_mode": mode,
+        "weights": parsed_weights,
+        "minimum_data_coverage_pct": _float_range(config.get("minimum_data_coverage_pct"), 60.0, 0.0, 100.0, "invalid_minimum_data_coverage"),
+        "selection_method": method,
+        "top_n": _int_range(config.get("top_n"), 10, 1, 50, "invalid_top_n"),
+        "top_percentile": _float_range(config.get("top_percentile"), 30.0, 1.0, 100.0, "invalid_top_percentile"),
+        "minimum_score": None if config.get("minimum_score") in (None, "") else _float_range(config.get("minimum_score"), 65.0, 0.0, 100.0, "invalid_minimum_score"),
+    }
+
+
+def _float_value(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _float_range(value, default: float, minimum: float, maximum: float, code: str) -> float:
+    parsed = _float_value(value, default)
+    if parsed < minimum or parsed > maximum:
+        raise serializers.ValidationError(code)
+    return parsed
+
+
+def _int_range(value, default: int, minimum: int, maximum: int, code: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if parsed < minimum or parsed > maximum:
+        raise serializers.ValidationError(code)
+    return parsed

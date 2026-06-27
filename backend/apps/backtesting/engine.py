@@ -12,6 +12,7 @@ from apps.market_data.finnhub import MarketDataError, fetch_daily_ohlcv
 from apps.market_data.symbols import normalize_symbol
 from apps.strategies.registry import StrategyValidationError, build_strategy_signals
 from apps.analytics.services import persist_backtest_result, persist_portfolio_optimization_result
+from apps.analytics.services import persist_factor_portfolio_result
 
 
 class BacktestExecutionError(Exception):
@@ -83,6 +84,32 @@ def run_structured_portfolio_optimization(
     analytics_source: str = "api",
 ) -> dict:
     return run_portfolio_optimization(payload, finnhub_api_key=finnhub_api_key, analytics_source=analytics_source)
+
+
+def run_factor_portfolio(
+    validated_request: dict,
+    finnhub_api_key: str | None = None,
+    analytics_source: str = "api",
+) -> dict:
+    if not settings.MCP_ENABLED:
+        raise BacktestExecutionError(
+            "mcp_disabled",
+            "Factor portfolio construction requires the MCP server.",
+        )
+
+    from apps.backtesting.mcp_client import MCPClientError, run_remote_factor_portfolio
+
+    try:
+        result = run_remote_factor_portfolio(validated_request, finnhub_api_key=finnhub_api_key)
+    except MCPClientError as exc:
+        raise BacktestExecutionError(exc.code, str(exc)) from exc
+
+    if result.get("status") == "success":
+        analytics_result = dict(result)
+        analytics_result["_analytics_request"] = dict(validated_request)
+        _apply_explicit_analytics_run_id(analytics_result, validated_request)
+        persist_factor_portfolio_result(analytics_result, source=analytics_source)
+    return result
 
 
 def _apply_explicit_analytics_run_id(result: dict, validated_request: dict) -> None:

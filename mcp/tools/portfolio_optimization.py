@@ -68,8 +68,9 @@ def optimize_max_sharpe(
     risk_free_rate=0.0,
     allow_short=False,
     max_weight=1.0,
+    expected_returns_annual: dict[str, float] | pd.Series | None = None,
 ) -> dict[str, Any]:
-    mean_returns, cov_matrix = _annualized_return_inputs(price_df)
+    mean_returns, cov_matrix = _annualized_return_inputs(price_df, expected_returns_annual)
 
     def objective(weights):
         _return, _volatility, sharpe = calculate_portfolio_metrics(
@@ -88,8 +89,9 @@ def optimize_min_volatility(
     risk_free_rate=0.0,
     allow_short=False,
     max_weight=1.0,
+    expected_returns_annual: dict[str, float] | pd.Series | None = None,
 ) -> dict[str, Any]:
-    mean_returns, cov_matrix = _annualized_return_inputs(price_df)
+    mean_returns, cov_matrix = _annualized_return_inputs(price_df, expected_returns_annual)
 
     def objective(weights):
         _return, volatility, _sharpe = calculate_portfolio_metrics(
@@ -110,10 +112,11 @@ def generate_efficient_frontier(
     allow_short=False,
     max_weight=1.0,
     num_portfolios: int | None = None,
+    expected_returns_annual: dict[str, float] | pd.Series | None = None,
 ) -> list[dict[str, Any]]:
     if num_portfolios is not None:
         num_points = num_portfolios
-    mean_returns, cov_matrix = _annualized_return_inputs(price_df)
+    mean_returns, cov_matrix = _annualized_return_inputs(price_df, expected_returns_annual)
     symbols = price_df.columns.tolist()
     min_return = _optimize_return_extreme(mean_returns, allow_short, max_weight, maximize=False)
     max_return = _optimize_return_extreme(mean_returns, allow_short, max_weight, maximize=True)
@@ -144,8 +147,9 @@ def generate_random_portfolios(
     risk_free_rate=0.0,
     allow_short=False,
     max_weight=1.0,
+    expected_returns_annual: dict[str, float] | pd.Series | None = None,
 ) -> list[dict[str, Any]]:
-    mean_returns, cov_matrix = _annualized_return_inputs(price_df)
+    mean_returns, cov_matrix = _annualized_return_inputs(price_df, expected_returns_annual)
     symbols = price_df.columns.tolist()
     points: list[dict[str, Any]] = []
     for weights in _random_weight_samples(
@@ -169,8 +173,9 @@ def generate_random_portfolios(
 def calculate_individual_assets(
     price_df,
     risk_free_rate=0.0,
+    expected_returns_annual: dict[str, float] | pd.Series | None = None,
 ) -> list[dict[str, Any]]:
-    mean_returns, cov_matrix = _annualized_return_inputs(price_df)
+    mean_returns, cov_matrix = _annualized_return_inputs(price_df, expected_returns_annual)
     assets: list[dict[str, Any]] = []
     symbols = price_df.columns.tolist()
     for index, symbol in enumerate(symbols):
@@ -236,6 +241,8 @@ def run_markowitz_optimization_core(
     monte_carlo_scenarios: list[str] | None = None,
     scenario_overrides: dict[str, dict[str, float]] | None = None,
     finnhub_api_key: str | None = None,
+    price_df: pd.DataFrame | None = None,
+    expected_returns_annual: dict[str, float] | pd.Series | None = None,
 ) -> dict[str, Any]:
     requested_symbols = _normalize_requested_symbols(symbols or [])
     requested_sector = str(sector or "").strip() or None
@@ -283,12 +290,15 @@ def run_markowitz_optimization_core(
     if len(used_symbols) * max_weight < 1.0 - 1e-9:
         raise ValueError("max_weight is too low for the number of selected symbols.")
 
-    price_df = fetch_multi_symbol_close_prices(
-        used_symbols,
-        lookback=lookback,
-        resolution=resolution,
-        finnhub_api_key=finnhub_api_key,
-    )
+    if price_df is None:
+        price_df = fetch_multi_symbol_close_prices(
+            used_symbols,
+            lookback=lookback,
+            resolution=resolution,
+            finnhub_api_key=finnhub_api_key,
+        )
+    else:
+        price_df = price_df.reindex(columns=used_symbols).dropna(how="any")
     if price_df.shape[1] < 2:
         raise ValueError("At least 2 symbols returned usable close-price history.")
     if len(price_df) < 2:
@@ -299,12 +309,14 @@ def run_markowitz_optimization_core(
         risk_free_rate=risk_free_rate,
         allow_short=allow_short,
         max_weight=max_weight,
+        expected_returns_annual=expected_returns_annual,
     )
     max_sharpe = optimize_max_sharpe(
         price_df,
         risk_free_rate=risk_free_rate,
         allow_short=allow_short,
         max_weight=max_weight,
+        expected_returns_annual=expected_returns_annual,
     )
     optimal = max_sharpe if objective == "max_sharpe" else min_volatility
 
@@ -314,6 +326,7 @@ def run_markowitz_optimization_core(
         risk_free_rate=risk_free_rate,
         allow_short=allow_short,
         max_weight=max_weight,
+        expected_returns_annual=expected_returns_annual,
     )
     frontier = generate_efficient_frontier(
         price_df,
@@ -321,9 +334,14 @@ def run_markowitz_optimization_core(
         risk_free_rate=risk_free_rate,
         allow_short=allow_short,
         max_weight=max_weight,
+        expected_returns_annual=expected_returns_annual,
     )
     correlation_matrix = calculate_correlation_matrix(price_df)
-    individual_assets = calculate_individual_assets(price_df, risk_free_rate=risk_free_rate)
+    individual_assets = calculate_individual_assets(
+        price_df,
+        risk_free_rate=risk_free_rate,
+        expected_returns_annual=expected_returns_annual,
+    )
     if invalid_symbols:
         warnings.append(f"Rejected invalid universe symbols: {', '.join(invalid_symbols)}.")
     if not frontier:
@@ -544,9 +562,18 @@ def _dedupe_and_sort_portfolio_points(points: list[dict[str, Any]]) -> list[dict
     return sorted(cleaned, key=lambda item: float(item["portfolio_volatility"]))
 
 
-def _annualized_return_inputs(price_df: pd.DataFrame) -> tuple[pd.Series, pd.DataFrame]:
+def _annualized_return_inputs(
+    price_df: pd.DataFrame,
+    expected_returns_annual: dict[str, float] | pd.Series | None = None,
+) -> tuple[pd.Series, pd.DataFrame]:
     returns = _daily_returns(price_df)
-    return returns.mean() * TRADING_DAYS, returns.cov() * TRADING_DAYS
+    mean_returns = returns.mean() * TRADING_DAYS
+    if expected_returns_annual is not None:
+        override = pd.Series(expected_returns_annual, dtype=float).reindex(mean_returns.index)
+        if override.notna().any():
+            mean_returns = mean_returns.copy()
+            mean_returns.loc[override.notna()] = override.loc[override.notna()]
+    return mean_returns, returns.cov() * TRADING_DAYS
 
 
 def _daily_returns(price_df: pd.DataFrame) -> pd.DataFrame:

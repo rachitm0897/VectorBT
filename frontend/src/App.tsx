@@ -7,11 +7,14 @@ import {
   getMcpStatus,
   runBacktest,
   runChat,
+  runFactorPortfolio,
   runPortfolioOptimization,
   type ApiKeys,
   type AnalyticsStatus,
   type BacktestRequest,
   type BacktestResult,
+  type FactorPortfolioRequest,
+  type FactorPortfolioResult,
   type MCPStatus,
   type PortfolioOptimizationRequest,
   type PortfolioResult,
@@ -20,6 +23,7 @@ import {
 import ApiKeyPanel from "./components/ApiKeyPanel";
 import BacktestForm, { buildBacktestPayload } from "./components/BacktestForm";
 import ChatPanel from "./components/ChatPanel";
+import FactorPortfolioPanel from "./components/FactorPortfolioPanel";
 import PortfolioOptimizerPanel from "./components/PortfolioOptimizerPanel";
 import AppShell from "./components/layout/AppShell";
 import CollapsiblePanel from "./components/layout/CollapsiblePanel";
@@ -29,6 +33,7 @@ import McpStatusPanel from "./components/panels/McpStatusPanel";
 import ParsedRequestPanel from "./components/panels/ParsedRequestPanel";
 import TokenUsagePanel from "./components/panels/TokenUsagePanel";
 import ResultDashboard from "./components/ResultDashboard";
+import FactorPortfolioResultDashboard from "./components/portfolio/FactorPortfolioResultDashboard";
 import PortfolioResultDashboard from "./components/portfolio/PortfolioResultDashboard";
 
 const emptyApiKeys: ApiKeys = {
@@ -54,12 +59,13 @@ export default function App() {
   const [fees, setFees] = useState(0.001);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [portfolioResult, setPortfolioResult] = useState<PortfolioResult | null>(null);
-  const [activeWorkflow, setActiveWorkflow] = useState<"backtest" | "portfolio">("backtest");
+  const [factorPortfolioResult, setFactorPortfolioResult] = useState<FactorPortfolioResult | null>(null);
+  const [activeWorkflow, setActiveWorkflow] = useState<"backtest" | "portfolio" | "factor">("backtest");
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
   const [parsedRequest, setParsedRequest] = useState<
-    BacktestRequest | PortfolioOptimizationRequest | Record<string, unknown> | null
+    BacktestRequest | PortfolioOptimizationRequest | FactorPortfolioRequest | Record<string, unknown> | null
   >(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
   const [usedChat, setUsedChat] = useState(false);
@@ -169,6 +175,7 @@ export default function App() {
       const response = await runBacktest(payload, apiKeys);
       setResult(response);
       setPortfolioResult(null);
+      setFactorPortfolioResult(null);
       setParsedRequest(payload);
       setDiagnostics(response.diagnostics || null);
       setUsedChat(false);
@@ -214,10 +221,17 @@ export default function App() {
 
       if (response.result_type === "portfolio_optimization" && response.portfolio_result) {
         setPortfolioResult(response.portfolio_result);
+        setFactorPortfolioResult(null);
         setActiveWorkflow("portfolio");
+      } else if (response.result_type === "factor_portfolio" && response.factor_portfolio_result) {
+        setFactorPortfolioResult(response.factor_portfolio_result);
+        setPortfolioResult(null);
+        setResult(null);
+        setActiveWorkflow("factor");
       } else if (response.backtest_result) {
         setResult(response.backtest_result);
         setPortfolioResult(null);
+        setFactorPortfolioResult(null);
         setActiveWorkflow("backtest");
       }
       void refreshMcpStatus();
@@ -246,6 +260,7 @@ export default function App() {
     try {
       const response = await runPortfolioOptimization(payload, apiKeys);
       setPortfolioResult(response.portfolio_result || null);
+      setFactorPortfolioResult(null);
       setParsedRequest(response.parsed_request || payload);
       setDiagnostics(response.diagnostics || null);
       setUsedChat(false);
@@ -254,6 +269,36 @@ export default function App() {
       void refreshAnalyticsStatus();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Portfolio optimization failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleFactorPortfolioSubmit(payload: FactorPortfolioRequest) {
+    setActiveWorkflow("factor");
+    setIsLoading(true);
+    setError(null);
+    setChatError(null);
+
+    if (!apiKeys.finnhubApiKey.trim()) {
+      setIsLoading(false);
+      setError("Finnhub API key is required for market and factor data.");
+      return;
+    }
+
+    try {
+      const response = await runFactorPortfolio(payload, apiKeys);
+      setFactorPortfolioResult(response.factor_portfolio_result || null);
+      setPortfolioResult(null);
+      setResult(null);
+      setParsedRequest(response.parsed_request || payload);
+      setDiagnostics(response.diagnostics || null);
+      setUsedChat(false);
+      setAssistantMessage(response.assistant_message || null);
+      void refreshMcpStatus();
+      void refreshAnalyticsStatus();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Factor portfolio construction failed.");
     } finally {
       setIsLoading(false);
     }
@@ -300,6 +345,10 @@ export default function App() {
             <PortfolioOptimizerPanel isLoading={isLoading} onSubmit={handlePortfolioSubmit} />
           </CollapsiblePanel>
 
+          <CollapsiblePanel title="Factor Portfolio" defaultOpen={false} summary="Quality, value, momentum">
+            <FactorPortfolioPanel isLoading={isLoading} onSubmit={handleFactorPortfolioSubmit} />
+          </CollapsiblePanel>
+
           <CollapsiblePanel title="MCP Diagnostics" defaultOpen={false} summary={mcpSummary}>
             <McpStatusPanel
               status={mcpStatus}
@@ -331,7 +380,13 @@ export default function App() {
         </Sidebar>
       }
     >
-      {activeWorkflow === "portfolio" ? (
+      {activeWorkflow === "factor" ? (
+        <FactorPortfolioResultDashboard
+          result={factorPortfolioResult}
+          isLoading={isLoading}
+          error={error}
+        />
+      ) : activeWorkflow === "portfolio" ? (
         <PortfolioResultDashboard
           result={portfolioResult}
           isLoading={isLoading}
