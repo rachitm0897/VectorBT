@@ -1,34 +1,12 @@
 from rest_framework import serializers
 
+from apps.portfolio_contracts import (
+    FACTOR_DEFAULTS,
+    FACTOR_GROUPS,
+    PORTFOLIO_MONTE_CARLO_DEFAULTS,
+    PORTFOLIO_SCENARIOS,
+)
 from apps.strategies.registry import SUPPORTED_STRATEGIES
-
-PORTFOLIO_SCENARIOS = ("neutral", "bullish", "bearish", "crash")
-PORTFOLIO_MONTE_CARLO_DEFAULTS = {
-    "enabled": False,
-    "days": 60,
-    "simulations": 500,
-    "block_size": 5,
-    "seed": 42,
-    "scenarios": list(PORTFOLIO_SCENARIOS),
-    "scenario_overrides": {},
-}
-FACTOR_GROUPS = ("fundamental_quality", "valuation", "momentum", "analyst", "financial_risk")
-FACTOR_DEFAULTS = {
-    "enabled": True,
-    "normalization_mode": "sector",
-    "weights": {
-        "fundamental_quality": 0.30,
-        "valuation": 0.20,
-        "momentum": 0.20,
-        "analyst": 0.15,
-        "financial_risk": 0.15,
-    },
-    "minimum_data_coverage_pct": 60.0,
-    "selection_method": "top_n",
-    "top_n": 10,
-    "top_percentile": 30.0,
-    "minimum_score": None,
-}
 
 
 class MonteCarloSerializer(serializers.Serializer):

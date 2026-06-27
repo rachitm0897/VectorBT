@@ -80,7 +80,7 @@ export default function PortfolioScenarioAnalysis({ result }: PortfolioScenarioA
                   <td className="px-3 py-2">{formatPercent(scenario.summary?.p5_return_pct)}</td>
                   <td className="px-3 py-2">{formatPercent(scenario.summary?.p50_return_pct)}</td>
                   <td className="px-3 py-2">{formatPercent(scenario.summary?.p95_return_pct)}</td>
-                  <td className="px-3 py-2">{formatPercent(scenario.summary?.average_max_drawdown_pct)}</td>
+                  <td className="px-3 py-2">{formatDrawdownPct(scenario.summary?.average_max_drawdown_pct)}</td>
                 </tr>
               ))}
             </tbody>
@@ -109,16 +109,20 @@ export default function PortfolioScenarioAnalysis({ result }: PortfolioScenarioA
                 x: path.map((_, index) => index),
                 y: path,
                 line: { color: scenarioColor(scenario.name), width: 2.2 },
-                hovertemplate: "Day %{x}<br>%{y:$,.2f}<extra></extra>",
+              hovertemplate: "Simulation Day %{x}<br>%{y:$,.2f}<extra></extra>",
               })) as never
             }
             layout={{
               ...plotlyLayoutDefaults,
               height: 320,
-              yaxis: { ...plotlyLayoutDefaults.yaxis, tickprefix: "$" },
+              yaxis: {
+                ...plotlyLayoutDefaults.yaxis,
+                tickprefix: "$",
+                title: { text: "Portfolio Value", font: { color: quantTheme.axis, size: 11 } },
+              },
               xaxis: {
                 ...plotlyLayoutDefaults.xaxis,
-                title: { text: "Forward day", font: { color: quantTheme.axis, size: 11 } },
+                title: { text: "Simulation Day", font: { color: quantTheme.axis, size: 11 } },
               },
             }}
             config={plotlyConfig}
@@ -148,7 +152,7 @@ function ScenarioSummaryCard({ scenario }: { scenario: NormalizedScenario }) {
         <Metric label="P5" value={formatPercent(summary.p5_return_pct)} />
         <Metric label="Median" value={formatPercent(summary.p50_return_pct)} />
         <Metric label="P95" value={formatPercent(summary.p95_return_pct)} />
-        <Metric label="Avg Drawdown" value={formatPercent(summary.average_max_drawdown_pct)} />
+        <Metric label="Avg Drawdown" value={formatDrawdownPct(summary.average_max_drawdown_pct)} />
         <Metric label="Expected Value" value={formatCurrency(summary.expected_final_value)} />
       </div>
     </div>
@@ -166,10 +170,11 @@ function ScenarioFanChart({
   scenarios: NormalizedScenario[];
   onSelect: (scenario: string) => void;
 }) {
+  const [showSamples, setShowSamples] = useState(false);
   const paths = chart?.percentile_paths || {};
   const hasPaths = pathKeys.some((key) => (paths[key] || []).length > 0);
   const x = Array.from({ length: Math.max(...pathKeys.map((key) => paths[key]?.length || 0), 0) }, (_, index) => index);
-  const sampleTraces = (chart?.sample_paths || []).slice(0, 8).map((path, index) => ({
+  const sampleTraces = showSamples ? (chart?.sample_paths || []).slice(0, 8).map((path, index) => ({
     type: "scatter",
     mode: "lines",
     name: `sample_${index}`,
@@ -178,24 +183,34 @@ function ScenarioFanChart({
     line: { color: "rgba(139,153,173,0.18)", width: 1 },
     hoverinfo: "skip",
     showlegend: false,
-  }));
+  })) : [];
+  const startValue = firstPathValue(paths);
 
   return (
     <SectionCard
       title="Scenario Fan Chart"
-      subtitle={scenarioLabel(selectedScenario)}
+      subtitle={`${scenarioLabel(selectedScenario)} / starts ${formatCurrency(startValue)}`}
       action={
-        <select
-          className="border border-line bg-ink px-2 py-1 text-xs text-text"
-          value={selectedScenario}
-          onChange={(event) => onSelect(event.target.value)}
-        >
-          {scenarios.map((scenario) => (
-            <option key={scenario.name} value={scenario.name}>
-              {scenario.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <button
+            className="border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted transition hover:border-cyan hover:text-cyan"
+            type="button"
+            onClick={() => setShowSamples((current) => !current)}
+          >
+            {showSamples ? "Hide Samples" : "Show Samples"}
+          </button>
+          <select
+            className="border border-line bg-ink px-2 py-1 text-xs text-text"
+            value={selectedScenario}
+            onChange={(event) => onSelect(event.target.value)}
+          >
+            {scenarios.map((scenario) => (
+              <option key={scenario.name} value={scenario.name}>
+                {scenario.label}
+              </option>
+            ))}
+          </select>
+        </div>
       }
     >
       {hasPaths ? (
@@ -254,17 +269,21 @@ function ScenarioFanChart({
                 x,
                 y: paths.p50 || [],
                 line: { color: scenarioColor(selectedScenario), width: 2.4 },
-                hovertemplate: "Day %{x}<br>Median %{y:$,.2f}<extra></extra>",
+                hovertemplate: "Simulation Day %{x}<br>Median %{y:$,.2f}<extra></extra>",
               },
             ] as never
           }
           layout={{
             ...plotlyLayoutDefaults,
             height: 340,
-            yaxis: { ...plotlyLayoutDefaults.yaxis, tickprefix: "$" },
+            yaxis: {
+              ...plotlyLayoutDefaults.yaxis,
+              tickprefix: "$",
+              title: { text: "Portfolio Value", font: { color: quantTheme.axis, size: 11 } },
+            },
             xaxis: {
               ...plotlyLayoutDefaults.xaxis,
-              title: { text: "Forward day", font: { color: quantTheme.axis, size: 11 } },
+              title: { text: "Simulation Day", font: { color: quantTheme.axis, size: 11 } },
             },
           }}
           config={plotlyConfig}
@@ -348,7 +367,8 @@ function scenarioSubtitle(result: PortfolioResult): string {
   const days = config.days ?? 60;
   const simulations = config.simulations ?? 500;
   const blockSize = config.block_size ?? 5;
-  return `${simulations} simulations / ${days} days / ${blockSize}-day blocks`;
+  const start = config.portfolio_start_value ? ` / starts ${formatCurrency(config.portfolio_start_value)}` : "";
+  return `${simulations} simulations / ${days} days / ${blockSize}-day blocks${start}`;
 }
 
 function scenarioColor(name: string): string {
@@ -378,4 +398,17 @@ function formatAssumptionPct(value: unknown): string {
 
 function formatMultiplier(value: unknown): string {
   return typeof value === "number" && Number.isFinite(value) ? `${formatNumber(value)}x` : "-";
+}
+
+function formatDrawdownPct(value: unknown): string {
+  const parsed = typeof value === "number" && Number.isFinite(value) ? value : null;
+  return parsed === null ? "-" : formatPercent(-Math.abs(parsed), 1);
+}
+
+function firstPathValue(paths: PortfolioScenarioChart["percentile_paths"] | undefined): number | null {
+  for (const key of pathKeys) {
+    const value = paths?.[key]?.[0];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
 }

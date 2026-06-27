@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test:portfolio": "node --test scripts/test-portfolio-view-model.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

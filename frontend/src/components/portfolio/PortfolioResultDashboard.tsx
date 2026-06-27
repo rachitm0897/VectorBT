@@ -78,9 +78,14 @@ export default function PortfolioResultDashboard({
               </div>
             ))}
             {parsedRequest ? (
-              <pre className="max-h-72 overflow-auto border border-line bg-ink p-3 text-xs leading-5 text-muted">
-                {JSON.stringify(parsedRequest, null, 2)}
-              </pre>
+              <details className="border border-line bg-ink">
+                <summary className="cursor-pointer px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+                  Advanced Details
+                </summary>
+                <pre className="max-h-72 overflow-auto border-t border-line p-3 text-xs leading-5 text-muted">
+                  {JSON.stringify(parsedRequest, null, 2)}
+                </pre>
+              </details>
             ) : null}
           </div>
         </SectionCard>

@@ -62,13 +62,12 @@ function EfficientFrontierChart({ result }: EfficientFrontierChartProps) {
             data={traces as never}
             layout={{
               ...plotlyLayoutDefaults,
-              title: { text: "Efficient Frontier: Risk vs Return", font: { color: quantTheme.text, size: 15 } },
               height: 460,
-              margin: { l: 64, r: 82, t: 48, b: 58 },
+              margin: { l: 64, r: 36, t: 22, b: 58 },
               xaxis: {
                 ...plotlyLayoutDefaults.xaxis,
                 type: "linear",
-                title: { text: "Annualized Volatility (%)", font: { color: quantTheme.axis, size: 12 } },
+                title: { text: "Annual Volatility (%)", font: { color: quantTheme.axis, size: 12 } },
                 tickformat: ".0%",
                 tickangle: 0,
                 automargin: true,
@@ -78,7 +77,7 @@ function EfficientFrontierChart({ result }: EfficientFrontierChartProps) {
               yaxis: {
                 ...plotlyLayoutDefaults.yaxis,
                 type: "linear",
-                title: { text: "Annualized Expected Return (%)", font: { color: quantTheme.axis, size: 12 } },
+                title: { text: "Expected Annual Return (%)", font: { color: quantTheme.axis, size: 12 } },
                 tickformat: ".0%",
                 tickangle: 0,
                 automargin: true,
@@ -114,6 +113,7 @@ function buildTraces(chartData: {
   individualAssets: NormalizedPoint[];
   minVolatility: NormalizedPoint | null;
   maxSharpe: NormalizedPoint | null;
+  selected: NormalizedPoint | null;
 }) {
   const traces: Array<Record<string, unknown>> = [];
 
@@ -125,18 +125,12 @@ function buildTraces(chartData: {
       x: chartData.randomPortfolios.map((point) => point.volatility),
       y: chartData.randomPortfolios.map((point) => point.portfolioReturn),
       marker: {
-        color: chartData.randomPortfolios.map((point) => point.sharpe),
-        colorscale: "Viridis",
-        showscale: true,
+        color: quantTheme.muted,
         size: 5,
-        opacity: 0.42,
-        colorbar: {
-          title: { text: "Sharpe Ratio", font: { color: quantTheme.axis, size: 11 } },
-          tickfont: { color: quantTheme.axis },
-        },
+        opacity: 0.34,
       },
       customdata: chartData.randomPortfolios.map((point) => point.sharpe),
-      hovertemplate: "Vol %{x:.1%}<br>Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
+      hovertemplate: "Annual Vol %{x:.1%}<br>Expected Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
     });
   }
 
@@ -148,7 +142,7 @@ function buildTraces(chartData: {
       x: chartData.frontier.map((point) => point.volatility),
       y: chartData.frontier.map((point) => point.portfolioReturn),
       line: { color: quantTheme.warning, width: 4, shape: "spline", smoothing: 0.55 },
-      hovertemplate: "Frontier<br>Vol %{x:.1%}<br>Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
+      hovertemplate: "Frontier<br>Annual Vol %{x:.1%}<br>Expected Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
       customdata: chartData.frontier.map((point) => point.sharpe),
     });
   }
@@ -162,7 +156,7 @@ function buildTraces(chartData: {
       y: [chartData.minVolatility.portfolioReturn],
       marker: { color: quantTheme.positive, size: 16, symbol: "circle", line: { color: quantTheme.text, width: 2 } },
       cliponaxis: false,
-      hovertemplate: "Minimum Volatility<br>Vol %{x:.1%}<br>Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
+      hovertemplate: "Minimum Volatility<br>Annual Vol %{x:.1%}<br>Expected Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
       customdata: [chartData.minVolatility.sharpe],
     });
   }
@@ -176,8 +170,22 @@ function buildTraces(chartData: {
       y: [chartData.maxSharpe.portfolioReturn],
       marker: { color: quantTheme.strategy, size: 19, symbol: "star", line: { color: quantTheme.text, width: 2 } },
       cliponaxis: false,
-      hovertemplate: "Maximum Sharpe<br>Vol %{x:.1%}<br>Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
+      hovertemplate: "Maximum Sharpe<br>Annual Vol %{x:.1%}<br>Expected Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
       customdata: [chartData.maxSharpe.sharpe],
+    });
+  }
+
+  if (chartData.selected) {
+    traces.push({
+      type: "scatter",
+      mode: "markers",
+      name: "Selected Objective",
+      x: [chartData.selected.volatility],
+      y: [chartData.selected.portfolioReturn],
+      marker: { color: "rgba(0,0,0,0)", size: 24, symbol: "diamond-open", line: { color: quantTheme.text, width: 2 } },
+      cliponaxis: false,
+      hovertemplate: "Selected Objective<br>Annual Vol %{x:.1%}<br>Expected Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
+      customdata: [chartData.selected.sharpe],
     });
   }
 
@@ -193,7 +201,7 @@ function buildTraces(chartData: {
       textposition: "top center",
       textfont: { color: quantTheme.text, size: 10 },
       marker: { color: "#05080d", size: 8, line: { color: quantTheme.muted, width: 1 } },
-      hovertemplate: "%{text}<br>Vol %{x:.1%}<br>Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
+      hovertemplate: "%{text}<br>Annual Vol %{x:.1%}<br>Expected Return %{y:.1%}<br>Sharpe %{customdata:.2f}<extra></extra>",
       customdata: chartData.individualAssets.map((point) => point.sharpe),
     });
   }

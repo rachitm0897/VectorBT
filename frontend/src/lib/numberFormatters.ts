@@ -14,6 +14,12 @@ export function formatPercent(value: unknown, maximumFractionDigits = 2): string
   return `${parsed.toFixed(maximumFractionDigits)}%`;
 }
 
+export function formatScore(value: unknown): string {
+  const parsed = asNumber(value);
+  if (parsed === null) return "-";
+  return parsed.toFixed(1);
+}
+
 export function formatNumber(value: unknown, maximumFractionDigits = 2): string {
   const parsed = asNumber(value);
   if (parsed === null) return "-";

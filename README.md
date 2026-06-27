@@ -201,6 +201,41 @@ Build a low-risk portfolio using stocks with a combined score above 65.
 
 Compact responses include `request_summary`, `universe_summary`, `factor_model_configuration`, compact `factor_scores`, `selected_stocks`, `rejected_stocks`, `optimization_result`, `portfolio_weights`, compact `scenario_analysis`, warnings, data sources, and an artifact link. Detailed raw factor values, normalized factor scores, effective weights, selected/rejected records, Markowitz artifacts, and scenario chart paths are stored in the MCP artifact when available.
 
+### Portfolio Workflow and Chart Conventions
+
+The frontend portfolio workflow is:
+
+```text
+Select universe
+-> Configure factor model
+-> Configure portfolio optimisation
+-> Configure scenarios
+-> Run construction
+-> Review stock ranking
+-> Review final allocation
+-> Review risk and scenarios
+```
+
+Portfolio charts follow these conventions:
+
+- Combined Stock Score sorts by `combined_portfolio_score` descending, shows rank beside each ticker, uses a fixed 0-100 Combined Score axis, and displays the top 10 by default with an option to expand.
+- Factor score comparison uses the sortable ranking table as the primary multi-stock view. Each score column is on the same 0-100 scale; selected and rejected stocks remain visible with status text.
+- Single-stock factor breakdown uses horizontal factor bars on a fixed 0-100 scale and repeats exact numeric factor values below the chart.
+- Portfolio weights use a sorted horizontal bar chart from highest to lowest weight. The chart warns when returned weights do not total approximately 100%.
+- Score versus portfolio weight uses a scatter plot with Combined Score on the 0-100 x-axis and Portfolio Weight (%) on the y-axis. Tooltips carry ticker details because Markowitz weights also depend on covariance, volatility, and constraints.
+- Sector allocation uses sorted horizontal bars by selected portfolio weight.
+- Efficient frontier charts show random portfolios as unconnected points, efficient frontier points as a line, and separate markers for maximum Sharpe, minimum volatility, and the selected objective portfolio. Axes are Annual Volatility (%) and Expected Annual Return (%).
+- Portfolio scenario charts show percentile bands and the median path by default. Sample paths are hidden behind a toggle.
+- Scenario drawdown metrics are displayed as negative percentages so deeper drawdowns read lower/worse.
+
+### Backend and MCP Responsibilities
+
+Financial calculations and portfolio business logic belong in the MCP server. The backend should orchestrate MCP calls and expose them to the frontend without reimplementing the same logic.
+
+Backend responsibilities are HTTP request handling, schema validation, MCP invocation, response envelopes, compact analytics persistence, tracing propagation, error translation, and secret redaction. The shared backend portfolio contract constants live in `backend/apps/portfolio_contracts.py`; serializers and natural-language parsing use those constants instead of maintaining separate default dictionaries. MCP remains the source of truth for factor calculations, score normalization, stock ranking, expected-return tilts, Markowitz optimization, covariance calculations, scenario assumptions, and Monte Carlo simulation.
+
+To add a portfolio metric or chart, add the calculation and compact/artifact output in the MCP tool first, pass it through the backend envelope without recalculating it, then add a frontend adapter or chart view that documents its sort order, unit, and scale. To add or modify an MCP financial tool, update the Pydantic schema in `mcp/tools/schemas.py`, implement the business logic under `mcp/tools/`, expose the tool in `mcp/server.py`, and add fixed-input tests that confirm financial outputs remain stable.
+
 ### Factor Analytics Tables
 
 `factor_portfolio_runs` stores one row per factor construction run:

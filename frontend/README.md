@@ -41,6 +41,21 @@ POST /api/portfolio/optimize/
 
 Results show optimal weights, expected annual return, annual volatility, Sharpe ratio, an efficient frontier chart, a correlation heatmap, warnings, and the MCP artifact link when available. If universe endpoints are unavailable, the manual symbol input remains usable.
 
+## Portfolio Chart Behavior
+
+Portfolio result charts use these sorting and scale rules:
+
+- Combined Stock Score is ranked descending, shows the highest score at the top, uses a fixed 0-100 Combined Score axis, and shows the top 10 by default.
+- Factor rankings are also available in a searchable, filterable, sortable table with score columns formatted to one decimal place.
+- Portfolio weights are sorted from highest to lowest and displayed as percentages, with a warning if returned weights do not total approximately 100%.
+- Score versus weight uses Combined Score on the 0-100 x-axis and Portfolio Weight (%) on the y-axis.
+- Sector allocation is sorted by final portfolio weight.
+- Efficient frontier axes are Annual Volatility (%) and Expected Annual Return (%); simulated portfolios are points, not connected lines.
+- Scenario fan charts show percentile bands and median path by default. Sample paths are available only behind a toggle.
+- Drawdown metrics are shown as negative percentages.
+
+Chart-ready portfolio arrays are normalized in `src/lib/portfolioViewModel.ts`; React components should not re-sort or re-scale the same result independently.
+
 ## Development
 
 ```bash

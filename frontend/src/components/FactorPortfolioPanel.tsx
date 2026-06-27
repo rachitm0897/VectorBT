@@ -257,10 +257,14 @@ export default function FactorPortfolioPanel({ isLoading, onSubmit }: FactorPort
 
       {step === 5 ? (
         <div className="space-y-3">
-          <StepTitle title="5. Review Results" />
-          <pre className="max-h-64 overflow-auto border border-line bg-ink p-3 text-xs leading-5 text-muted">
-            {JSON.stringify({ selectionMode, sector, symbols, weights, selectionMethod, objective, expectedReturnMethod, scenarioEnabled }, null, 2)}
-          </pre>
+          <StepTitle title="5. Review Configuration" />
+          <div className="space-y-2">
+            <ReviewRow label="Universe" value={selectionMode === "sector" ? sector : symbols.join(", ")} />
+            <ReviewRow label="Factor Weights" value={`Quality ${weights.fundamental_quality}%, Valuation ${weights.valuation}%, Momentum ${weights.momentum}%, Analyst ${weights.analyst}%, Risk ${weights.financial_risk}%`} />
+            <ReviewRow label="Selection" value={selectionMethod === "top_n" ? `Top ${topN}` : selectionMethod === "top_percentile" ? `Top ${topPercentile}%` : selectionMethod === "minimum_score" ? `Minimum score ${minimumScore}` : "All eligible"} />
+            <ReviewRow label="Optimization" value={`${objective.replace(/_/g, " ")} using ${expectedReturnMethod.replace(/_/g, " ")} returns`} />
+            <ReviewRow label="Scenarios" value={scenarioEnabled ? selectedScenarios.map((item) => scenarioLabel(item)).join(", ") : "Disabled"} />
+          </div>
         </div>
       ) : null}
 
@@ -288,6 +292,15 @@ function Warning({ message }: { message: string }) {
   return <div className="border border-amber/60 bg-amber/10 px-3 py-2 text-xs leading-5 text-amber">{message}</div>;
 }
 
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border border-line bg-ink px-3 py-2 text-xs">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</span>
+      <span className="max-w-[70%] text-right text-text">{value || "-"}</span>
+    </div>
+  );
+}
+
 function stepClass(active: boolean): string {
   return ["px-2 py-2 text-xs font-semibold transition", active ? "bg-cyan/15 text-cyan" : "text-muted hover:text-text"].join(" ");
 }
@@ -302,6 +315,10 @@ function parseSymbols(value: string): string[] {
 
 function factorLabel(key: string): string {
   return key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function scenarioLabel(value: PortfolioScenarioName): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function clamp(value: number, min: number, max: number): number {

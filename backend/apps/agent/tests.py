@@ -15,6 +15,7 @@ from apps.agent.graph import (
 )
 from apps.api_keys import api_keys_from_request
 from apps.langsmith_tracing import REDACTED, request_id_context, safe_metadata
+from apps.portfolio_contracts import FACTOR_PORTFOLIO_DEFAULTS, PORTFOLIO_DEFAULTS
 
 
 class RequestConfigTests(SimpleTestCase):
@@ -58,6 +59,12 @@ class RequestConfigTests(SimpleTestCase):
 
 
 class ParserConfigTests(SimpleTestCase):
+    def test_portfolio_defaults_are_shared_with_contract_module(self):
+        import apps.agent.graph as graph
+
+        self.assertIs(graph.PORTFOLIO_DEFAULTS, PORTFOLIO_DEFAULTS)
+        self.assertIs(graph.FACTOR_PORTFOLIO_DEFAULTS, FACTOR_PORTFOLIO_DEFAULTS)
+
     def test_missing_chat_api_key_returns_clean_error(self):
         state = parse_request_node({"message": "Backtest AAPL", "chat_api_key": ""})
 
