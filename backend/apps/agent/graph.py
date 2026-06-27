@@ -60,6 +60,15 @@ PORTFOLIO_DEFAULTS = {
     "allow_short": False,
     "max_weight": 0.6,
     "num_frontier_portfolios": 3000,
+    "monte_carlo": {
+        "enabled": False,
+        "days": 60,
+        "simulations": 500,
+        "block_size": 5,
+        "seed": 42,
+        "scenarios": ["neutral", "bullish", "bearish", "crash"],
+        "scenario_overrides": {},
+    },
 }
 
 STRATEGY_DEFAULT_PARAMETERS = {
@@ -91,7 +100,8 @@ Strategies: sma_crossover fast_window=20 slow_window=50; rsi_mean_reversion rsi_
 If the user names another strategy or indicator, preserve that normalized name in strategy. Do not silently replace it with a supported strategy.
 Names: Apple=AAPL Tesla=TSLA Nvidia=NVDA Microsoft=MSFT Amazon=AMZN Meta/Facebook=META Google/Alphabet=GOOGL Netflix=NFLX.
 Backtest defaults: strategy=sma_crossover lookback=2y resolution=D initial_cash=10000 fees=0.001 monte_carlo={enabled:true,days:60,simulations:500,method:bootstrap}.
-Portfolio defaults: lookback=2y resolution=D objective=max_sharpe risk_free_rate=0 allow_short=false max_weight=0.6 num_frontier_portfolios=3000.
+Portfolio defaults: lookback=2y resolution=D objective=max_sharpe risk_free_rate=0 allow_short=false max_weight=0.6 num_frontier_portfolios=3000 monte_carlo={enabled:false,days:60,simulations:500,block_size:5,seed:42,scenarios:["neutral","bullish","bearish","crash"],scenario_overrides:{}}.
+Portfolio scenario presets are only neutral,bullish,bearish,crash. Do not invent scenario names.
 Lookback allowed: 1mo,6mo,1y,2y,5y. Use null when symbol missing.
 For portfolio requests output symbols as tickers. If sector-only, output sector and symbols=[].
 Examples: "Optimize AAPL, MSFT, NVDA and GOOGL using Markowitz" => request_type=portfolio_optimization symbols=["AAPL","MSFT","NVDA","GOOGL"] objective=max_sharpe.
@@ -99,10 +109,12 @@ Examples: "Optimize AAPL, MSFT, NVDA and GOOGL using Markowitz" => request_type=
 "Find minimum volatility portfolio using AAPL MSFT AMZN META over 2 years" => request_type=portfolio_optimization symbols=["AAPL","MSFT","AMZN","META"] lookback=2y objective=min_volatility.
 "Create a max Sharpe portfolio from Technology stocks using Markowitz" => request_type=portfolio_optimization sector="Technology" symbols=[] objective=max_sharpe.
 "Find minimum volatility portfolio from Healthcare stocks" => request_type=portfolio_optimization sector="Healthcare" symbols=[] objective=min_volatility.
+"Create a max Sharpe portfolio from Technology stocks and test neutral, bullish, bearish and crash scenarios for 60 days." => request_type=portfolio_optimization sector="Technology" symbols=[] objective=max_sharpe monte_carlo={"enabled":true,"days":60,"simulations":500,"block_size":5,"seed":42,"scenarios":["neutral","bullish","bearish","crash"],"scenario_overrides":{}}.
+"Optimize AAPL, MSFT, NVDA and GOOGL, then run a 90-day bearish and crash Monte Carlo simulation." => request_type=portfolio_optimization symbols=["AAPL","MSFT","NVDA","GOOGL"] objective=max_sharpe monte_carlo={"enabled":true,"days":90,"simulations":500,"block_size":5,"seed":42,"scenarios":["bearish","crash"],"scenario_overrides":{}}.
 "Backtest AAPL using MACD. Enter when MACD crosses above the signal line and exit when it crosses below." => request_type=strategy_backtest symbol=AAPL strategy=macd_crossover parameters={"fast_period":12,"slow_period":26,"signal_period":9}.
 Do not invent unsupported tools or request types.
 Output keys for backtests: request_type,symbol,strategy,parameters,lookback,resolution,initial_cash,fees,monte_carlo.
-Output keys for portfolios: request_type,symbols,sector,lookback,resolution,objective,risk_free_rate,allow_short,max_weight,num_frontier_portfolios."""
+Output keys for portfolios: request_type,symbols,sector,lookback,resolution,objective,risk_free_rate,allow_short,max_weight,num_frontier_portfolios,monte_carlo."""
 
 
 class AgentState(TypedDict, total=False):
@@ -279,6 +291,7 @@ def validate_request_node(state: AgentState) -> AgentState:
                 100,
                 10000,
             ),
+            "monte_carlo": _defaulted_portfolio_monte_carlo(parsed.get("monte_carlo")),
         }
         serializer = PortfolioOptimizationRequestSerializer(data=request_data)
         if not serializer.is_valid():
@@ -460,7 +473,7 @@ def _call_parser_llm(message: str, api_key: str, chat_url: str, model: str) -> d
     request_options: dict[str, Any] = {
         "model": model,
         "temperature": 0,
-        "max_tokens": 520,
+        "max_tokens": 700,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": PARSER_PROMPT},
@@ -677,6 +690,39 @@ def _defaulted_monte_carlo(raw_monte_carlo: Any) -> dict[str, Any]:
     return monte_carlo
 
 
+def _defaulted_portfolio_monte_carlo(raw_monte_carlo: Any) -> dict[str, Any]:
+    defaults = PORTFOLIO_DEFAULTS["monte_carlo"]
+    monte_carlo = {
+        **defaults,
+        "scenarios": list(defaults["scenarios"]),
+        "scenario_overrides": {},
+    }
+    if isinstance(raw_monte_carlo, dict):
+        monte_carlo.update({key: value for key, value in raw_monte_carlo.items() if value is not None})
+
+    monte_carlo["enabled"] = bool(
+        monte_carlo.get("enabled", False)
+        or (isinstance(raw_monte_carlo, dict) and bool(raw_monte_carlo.get("scenarios")))
+    )
+    monte_carlo["days"] = _bounded_int(monte_carlo.get("days"), 60, 1, 252)
+    monte_carlo["simulations"] = _bounded_int(monte_carlo.get("simulations"), 500, 100, 5000)
+    monte_carlo["block_size"] = _bounded_int(monte_carlo.get("block_size"), 5, 1, 20)
+    monte_carlo["seed"] = _nullable_int(monte_carlo.get("seed"), 42)
+
+    raw_scenarios = monte_carlo.get("scenarios")
+    if isinstance(raw_scenarios, list) and raw_scenarios:
+        monte_carlo["scenarios"] = [str(item or "").strip().lower() for item in raw_scenarios]
+    else:
+        monte_carlo["scenarios"] = list(defaults["scenarios"])
+
+    monte_carlo["scenario_overrides"] = (
+        monte_carlo.get("scenario_overrides")
+        if isinstance(monte_carlo.get("scenario_overrides"), dict)
+        else {}
+    )
+    return monte_carlo
+
+
 def _normalize_lookback(value: Any) -> str:
     lookback = str(value or DEFAULTS["lookback"]).strip().lower()
     aliases = {
@@ -747,6 +793,15 @@ def _bounded_int(value: Any, default: int, lower: int, upper: int) -> int:
     except (TypeError, ValueError):
         return default
     return parsed if lower <= parsed <= upper else default
+
+
+def _nullable_int(value: Any, default: int) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _strategy_label(strategy: str) -> str:

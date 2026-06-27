@@ -46,6 +46,26 @@ export type StockUniverseItem = {
   notes?: string;
 };
 
+export type PortfolioScenarioName = "neutral" | "bullish" | "bearish" | "crash";
+
+export type PortfolioScenarioAssumptions = {
+  drift_shift_annual?: number;
+  volatility_multiplier?: number;
+  initial_shock_pct?: number;
+};
+
+export type PortfolioScenarioOverride = Partial<PortfolioScenarioAssumptions>;
+
+export type PortfolioMonteCarloConfig = {
+  enabled: boolean;
+  days: number;
+  simulations: number;
+  block_size: number;
+  seed: number | null;
+  scenarios: PortfolioScenarioName[];
+  scenario_overrides: Partial<Record<PortfolioScenarioName, PortfolioScenarioOverride>>;
+};
+
 export type PortfolioOptimizationRequest = {
   symbols: string[];
   sector?: string;
@@ -56,6 +76,7 @@ export type PortfolioOptimizationRequest = {
   allow_short: boolean;
   max_weight: number;
   num_frontier_portfolios: number;
+  monte_carlo?: PortfolioMonteCarloConfig;
 };
 
 export type PortfolioMetrics = {
@@ -94,6 +115,50 @@ export type CorrelationRow = {
   [symbol: string]: string | number | undefined;
 };
 
+export type PortfolioScenarioSummary = {
+  expected_return_pct?: number;
+  probability_positive_return_pct?: number;
+  probability_loss_above_10_pct?: number;
+  p5_return_pct?: number;
+  p25_return_pct?: number;
+  p50_return_pct?: number;
+  p75_return_pct?: number;
+  p95_return_pct?: number;
+  expected_final_value?: number;
+  p5_final_value?: number;
+  p50_final_value?: number;
+  p95_final_value?: number;
+  average_max_drawdown_pct?: number;
+  worst_simulated_drawdown_pct?: number;
+};
+
+export type PortfolioScenarioCompact = {
+  name: PortfolioScenarioName | string;
+  label?: string;
+  assumptions?: PortfolioScenarioAssumptions;
+  summary?: PortfolioScenarioSummary;
+};
+
+export type PortfolioScenarioAnalysis = {
+  enabled?: boolean;
+  config?: {
+    enabled?: boolean;
+    days?: number;
+    simulations?: number;
+    block_size?: number;
+    seed?: number | null;
+    portfolio_start_value?: number;
+  };
+  scenarios?: PortfolioScenarioCompact[];
+};
+
+export type PortfolioScenarioChart = {
+  assumptions?: PortfolioScenarioAssumptions;
+  summary?: PortfolioScenarioSummary;
+  percentile_paths?: Partial<Record<"p5" | "p25" | "p50" | "p75" | "p95", number[]>>;
+  sample_paths?: number[][];
+};
+
 export type PortfolioResult = {
   status: "success" | "error";
   objective?: string;
@@ -114,7 +179,9 @@ export type PortfolioResult = {
     max_sharpe_portfolio?: OptimalPortfolioPoint;
     individual_assets?: IndividualAssetPoint[];
     correlation_matrix?: CorrelationRow[];
+    scenario_analysis?: Record<string, PortfolioScenarioChart>;
   };
+  scenario_analysis?: PortfolioScenarioAnalysis;
   warnings?: string[];
 };
 

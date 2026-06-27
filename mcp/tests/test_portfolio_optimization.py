@@ -78,6 +78,7 @@ def test_markowitz_core_saves_artifact_without_api_key(monkeypatch, tmp_path):
     assert result["symbols_used"] == ["AAPL", "MSFT"]
     assert result["rejected_symbols"] == ["NOTREAL"]
     assert result["artifact_id"].startswith("markowitz_")
+    assert "scenario_analysis" not in result
     assert "secret-key-not-stored" not in str(result)
     artifact_text = (tmp_path / "results" / f"{result['artifact_id']}.json").read_text(encoding="utf-8")
     artifact = json.loads(artifact_text)
@@ -96,6 +97,7 @@ def test_markowitz_core_saves_artifact_without_api_key(monkeypatch, tmp_path):
     assert artifact["min_volatility_portfolio"]
     assert artifact["max_sharpe_portfolio"]
     assert artifact["correlation_matrix"]
+    assert "scenario_analysis" not in artifact
     for key in ("min_volatility_portfolio", "max_sharpe_portfolio"):
         assert isinstance(artifact[key]["portfolio_volatility"], float)
         assert isinstance(artifact[key]["portfolio_return"], float)
@@ -125,6 +127,35 @@ def test_markowitz_core_uses_sector_when_symbols_are_empty(monkeypatch, tmp_path
     assert result["sector"] == "Technology"
     assert result["symbols_used"]
     assert "AAPL" in result["symbols_used"]
+
+
+def test_markowitz_core_adds_scenario_analysis_when_enabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("MCP_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        optimizer,
+        "fetch_multi_symbol_close_prices",
+        lambda symbols, **_kwargs: synthetic_price_frame(symbols),
+    )
+
+    result = optimizer.run_markowitz_optimization_core(
+        symbols=["AAPL", "MSFT", "NVDA"],
+        num_frontier_portfolios=100,
+        max_weight=0.7,
+        run_monte_carlo=True,
+        monte_carlo_days=10,
+        monte_carlo_simulations=100,
+        monte_carlo_block_size=5,
+        monte_carlo_seed=42,
+        monte_carlo_scenarios=["neutral", "crash"],
+    )
+
+    assert result["status"] == "success"
+    assert result["scenario_analysis"]["enabled"] is True
+    assert [item["name"] for item in result["scenario_analysis"]["scenarios"]] == ["neutral", "crash"]
+    artifact_text = (tmp_path / "results" / f"{result['artifact_id']}.json").read_text(encoding="utf-8")
+    artifact = json.loads(artifact_text)
+    assert set(artifact["scenario_analysis"]["scenarios"]) == {"neutral", "crash"}
+    assert len(artifact["scenario_analysis"]["scenarios"]["neutral"]["percentile_paths"]["p50"]) == 11
 
 
 def test_markowitz_core_prefers_explicit_symbols_over_sector(monkeypatch, tmp_path):

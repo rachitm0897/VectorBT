@@ -469,6 +469,7 @@ def _compact_portfolio_result(portfolio_result: dict[str, Any]) -> dict[str, Any
         "data_quality": portfolio_result.get("data_quality"),
         "artifact_id": portfolio_result.get("artifact_id"),
         "artifact_url": portfolio_result.get("artifact_url"),
+        "scenario_analysis": portfolio_result.get("scenario_analysis"),
         "warnings": portfolio_result.get("warnings"),
     }
 

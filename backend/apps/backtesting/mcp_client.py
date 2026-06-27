@@ -280,6 +280,7 @@ def _tool_arguments(validated_request: dict[str, Any], finnhub_api_key: str | No
 
 
 def _portfolio_tool_arguments(validated_request: dict[str, Any], finnhub_api_key: str | None) -> dict[str, Any]:
+    monte_carlo = validated_request.get("monte_carlo") or {}
     arguments = {
         "symbols": list(validated_request.get("symbols") or []),
         "sector": validated_request.get("sector") or None,
@@ -290,6 +291,19 @@ def _portfolio_tool_arguments(validated_request: dict[str, Any], finnhub_api_key
         "allow_short": bool(validated_request.get("allow_short", False)),
         "max_weight": float(validated_request.get("max_weight", 0.6)),
         "num_frontier_portfolios": int(validated_request.get("num_frontier_portfolios", 3000)),
+        "run_monte_carlo": bool(monte_carlo.get("enabled", False)),
+        "monte_carlo_days": int(monte_carlo.get("days", 60)),
+        "monte_carlo_simulations": int(monte_carlo.get("simulations", 500)),
+        "monte_carlo_block_size": int(monte_carlo.get("block_size", 5)),
+        "monte_carlo_seed": monte_carlo.get("seed", 42),
+        "monte_carlo_scenarios": list(
+            monte_carlo.get("scenarios") or ["neutral", "bullish", "bearish", "crash"]
+        ),
+        "scenario_overrides": (
+            monte_carlo.get("scenario_overrides")
+            if isinstance(monte_carlo.get("scenario_overrides"), dict)
+            else {}
+        ),
     }
     if finnhub_api_key:
         arguments["finnhub_api_key"] = finnhub_api_key
@@ -359,6 +373,9 @@ def _portfolio_backend_response(compact: dict[str, Any], arguments: dict[str, An
         "individual_assets": _artifact_list(artifact, compact, "individual_assets"),
         "correlation_matrix": _artifact_list(artifact, compact, "correlation_matrix"),
     }
+    scenario_analysis = _portfolio_scenario_analysis(compact, artifact)
+    if scenario_analysis.get("enabled"):
+        charts["scenario_analysis"] = _portfolio_scenario_chart_data(artifact)
 
     portfolio_result = {
         "status": "success",
@@ -376,6 +393,8 @@ def _portfolio_backend_response(compact: dict[str, Any], arguments: dict[str, An
         "charts": charts,
         "warnings": warnings,
     }
+    if scenario_analysis.get("enabled"):
+        portfolio_result["scenario_analysis"] = scenario_analysis
 
     return {
         "status": "success",
@@ -391,6 +410,15 @@ def _portfolio_backend_response(compact: dict[str, Any], arguments: dict[str, An
             "allow_short": arguments.get("allow_short"),
             "max_weight": arguments.get("max_weight"),
             "num_frontier_portfolios": arguments.get("num_frontier_portfolios"),
+            "monte_carlo": {
+                "enabled": bool(arguments.get("run_monte_carlo", False)),
+                "days": arguments.get("monte_carlo_days"),
+                "simulations": arguments.get("monte_carlo_simulations"),
+                "block_size": arguments.get("monte_carlo_block_size"),
+                "seed": arguments.get("monte_carlo_seed"),
+                "scenarios": arguments.get("monte_carlo_scenarios"),
+                "scenario_overrides": arguments.get("scenario_overrides") or {},
+            },
         },
         "result_type": "portfolio_optimization",
         "portfolio_result": portfolio_result,
@@ -470,6 +498,77 @@ def _artifact_dict(
         return value
     value = compact.get(key)
     return value if isinstance(value, dict) else {}
+
+
+def _portfolio_scenario_analysis(compact: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
+    compact_analysis = compact.get("scenario_analysis") if isinstance(compact.get("scenario_analysis"), dict) else {}
+    artifact_analysis = artifact.get("scenario_analysis") if isinstance(artifact.get("scenario_analysis"), dict) else {}
+    artifact_config = artifact_analysis.get("config") if isinstance(artifact_analysis.get("config"), dict) else {}
+    scenarios = compact_analysis.get("scenarios")
+    if not isinstance(scenarios, list):
+        scenarios = []
+        artifact_scenarios = (
+            artifact_analysis.get("scenarios") if isinstance(artifact_analysis.get("scenarios"), dict) else {}
+        )
+        for name, payload in artifact_scenarios.items():
+            if not isinstance(payload, dict):
+                continue
+            scenarios.append(
+                {
+                    "name": str(name),
+                    "label": _scenario_label(str(name)),
+                    "assumptions": payload.get("assumptions") if isinstance(payload.get("assumptions"), dict) else {},
+                    "summary": payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+                }
+            )
+
+    enabled = bool(compact_analysis.get("enabled") or artifact_config.get("enabled") or scenarios)
+    if not enabled:
+        return {"enabled": False, "config": {}, "scenarios": []}
+
+    config = {
+        "enabled": True,
+        "days": compact_analysis.get("days", artifact_config.get("days")),
+        "simulations": compact_analysis.get("simulations", artifact_config.get("simulations")),
+        "block_size": compact_analysis.get("block_size", artifact_config.get("block_size")),
+        "seed": compact_analysis.get("seed", artifact_config.get("seed")),
+        "portfolio_start_value": compact_analysis.get(
+            "portfolio_start_value",
+            artifact_config.get("portfolio_start_value"),
+        ),
+    }
+    return {
+        "enabled": True,
+        "config": config,
+        "scenarios": [scenario for scenario in scenarios if isinstance(scenario, dict)],
+    }
+
+
+def _portfolio_scenario_chart_data(artifact: dict[str, Any]) -> dict[str, Any]:
+    analysis = artifact.get("scenario_analysis") if isinstance(artifact.get("scenario_analysis"), dict) else {}
+    scenarios = analysis.get("scenarios") if isinstance(analysis.get("scenarios"), dict) else {}
+    chart_data: dict[str, Any] = {}
+    for name, payload in scenarios.items():
+        if not isinstance(payload, dict):
+            continue
+        chart_data[str(name)] = {
+            "assumptions": payload.get("assumptions") if isinstance(payload.get("assumptions"), dict) else {},
+            "summary": payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+            "percentile_paths": (
+                payload.get("percentile_paths") if isinstance(payload.get("percentile_paths"), dict) else {}
+            ),
+            "sample_paths": payload.get("sample_paths") if isinstance(payload.get("sample_paths"), list) else [],
+        }
+    return chart_data
+
+
+def _scenario_label(name: str) -> str:
+    return {
+        "neutral": "Neutral",
+        "bullish": "Bullish",
+        "bearish": "Bearish",
+        "crash": "Crash",
+    }.get(name, name.replace("_", " ").title())
 
 
 def _decode_tool_result(result: Any) -> dict[str, Any]:

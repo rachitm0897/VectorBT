@@ -42,6 +42,7 @@ Inside Docker, the database host is `analytics_db`, not `localhost`.
 - Equity points
 - Markowitz portfolio optimization runs
 - Portfolio weights
+- Compact portfolio scenario summaries
 - MCP tool calls
 
 ## Not Stored
@@ -51,6 +52,47 @@ Inside Docker, the database host is `analytics_db`, not `localhost`.
 - Raw secrets
 
 User-provided Chat URL, Chat API key, model, and Finnhub API key still flow from the frontend to the backend request path. They are not stored in PostgreSQL or Metabase.
+
+## Portfolio Scenario Monte Carlo
+
+The existing `run_markowitz_optimization` MCP tool can optionally run portfolio-level Monte Carlo scenario analysis after Markowitz weights are calculated. It uses the selected objective portfolio weights, builds historical weighted portfolio returns from the aligned close-price frame, and runs block-bootstrap simulations against the same optimized portfolio.
+
+Available presets:
+
+- `neutral`: drift shift `0.00`, volatility multiplier `1.00`, initial shock `0.00`
+- `bullish`: drift shift `0.08`, volatility multiplier `0.85`, initial shock `0.00`
+- `bearish`: drift shift `-0.08`, volatility multiplier `1.25`, initial shock `0.00`
+- `crash`: drift shift `-0.10`, volatility multiplier `1.75`, initial shock `-0.15`
+
+These values are configurable assumptions for scenario testing, not market forecasts.
+
+Example request:
+
+```json
+{
+  "symbols": ["AAPL", "MSFT", "NVDA", "GOOGL"],
+  "objective": "max_sharpe",
+  "lookback": "2y",
+  "resolution": "D",
+  "monte_carlo": {
+    "enabled": true,
+    "days": 60,
+    "simulations": 500,
+    "block_size": 5,
+    "seed": 42,
+    "scenarios": ["neutral", "bullish", "bearish", "crash"],
+    "scenario_overrides": {}
+  }
+}
+```
+
+Natural language example:
+
+```text
+Create a max Sharpe portfolio from Technology stocks and test neutral, bullish, bearish and crash scenarios for 60 days.
+```
+
+Compact results are returned under `portfolio_result.scenario_analysis` with the actual assumptions and summary metrics used for each scenario. Full percentile paths and up to 20 sample paths per scenario are stored in the MCP artifact under `scenario_analysis.scenarios`. PostgreSQL persistence stores only compact scenario summaries inside the existing redacted JSON fields, not full simulation paths.
 
 ## LangSmith tracing
 

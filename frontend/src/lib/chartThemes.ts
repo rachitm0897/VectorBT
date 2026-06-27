@@ -23,6 +23,13 @@ export const quantTheme = {
   mcMedian: "#32d3d3",
 };
 
+export const scenarioTheme = {
+  neutral: quantTheme.neutral,
+  bullish: quantTheme.positive,
+  bearish: quantTheme.warning,
+  crash: quantTheme.negative,
+};
+
 export const plotlyLayoutDefaults: any = {
   paper_bgcolor: quantTheme.panel,
   plot_bgcolor: quantTheme.panel,

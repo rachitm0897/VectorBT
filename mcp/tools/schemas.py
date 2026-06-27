@@ -10,6 +10,7 @@ StrategyName = str
 Lookback = Literal["1mo", "6mo", "1y", "2y", "5y"]
 Resolution = Literal["D"]
 MonteCarloMethod = Literal["bootstrap"]
+ScenarioName = Literal["neutral", "bullish", "bearish", "crash"]
 
 
 def _default_initial_cash() -> float:
@@ -60,6 +61,35 @@ class StrategyResearchRequest(StrategyBacktestRequest):
     run_monte_carlo: bool = True
     monte_carlo_days: int = Field(default=60, ge=1, le=252)
     monte_carlo_simulations: int = Field(default=500, ge=10, le=5000)
+
+
+class PortfolioScenarioOverride(BaseModel):
+    drift_shift_annual: float | None = Field(default=None, ge=-0.50, le=0.50)
+    volatility_multiplier: float | None = Field(default=None, ge=0.25, le=4.0)
+    initial_shock_pct: float | None = Field(default=None, ge=-0.80, le=0.80)
+
+
+class MarkowitzOptimizationRequest(BaseModel):
+    symbols: list[str] | None = None
+    sector: str | None = None
+    lookback: Lookback = "2y"
+    resolution: Resolution = "D"
+    objective: Literal["max_sharpe", "min_volatility"] = "max_sharpe"
+    risk_free_rate: float = Field(default=0.0, ge=0.0, le=0.25)
+    allow_short: bool = False
+    max_weight: float = Field(default=0.6, ge=0.05, le=1.0)
+    num_frontier_portfolios: int = Field(default=3000, ge=100, le=10000)
+    run_monte_carlo: bool = False
+    monte_carlo_days: int = Field(default=60, ge=1, le=252)
+    monte_carlo_simulations: int = Field(default=500, ge=100, le=5000)
+    monte_carlo_block_size: int = Field(default=5, ge=1, le=20)
+    monte_carlo_seed: int | None = 42
+    monte_carlo_scenarios: list[ScenarioName] = Field(
+        default_factory=lambda: ["neutral", "bullish", "bearish", "crash"],
+        min_length=1,
+    )
+    scenario_overrides: dict[ScenarioName, PortfolioScenarioOverride] = Field(default_factory=dict)
+    finnhub_api_key: str | None = Field(default=None, exclude=True)
 
 
 def parse_request(model: type[BaseModel], payload: dict[str, Any]) -> BaseModel:

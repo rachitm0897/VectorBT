@@ -13,6 +13,7 @@ from scipy.optimize import minimize
 from tools.cache import cache_key
 from tools.formatting import save_artifact_json
 from tools.market_data import fetch_finnhub_candles_with_metadata
+from tools.monte_carlo import SCENARIO_NAMES, run_portfolio_scenario_monte_carlo
 from tools.universe import resolve_market_data_symbol, resolve_symbols_for_sector, validate_symbols
 
 
@@ -200,6 +201,23 @@ def calculate_correlation_matrix(price_df) -> list[dict[str, Any]]:
     return rows
 
 
+def calculate_weighted_portfolio_returns(
+    price_df: pd.DataFrame,
+    weights: dict[str, float],
+) -> pd.Series:
+    returns = _daily_returns(price_df)
+    weight_series = pd.Series(weights, dtype=float).reindex(returns.columns)
+    if weight_series.isna().any():
+        missing = [str(symbol) for symbol, value in weight_series.items() if pd.isna(value)]
+        raise ValueError(f"Optimized weights were missing for: {', '.join(missing)}.")
+    portfolio_returns = returns.mul(weight_series, axis=1).sum(axis=1)
+    portfolio_returns = portfolio_returns.replace([np.inf, -np.inf], np.nan).dropna()
+    if portfolio_returns.empty:
+        raise ValueError("No valid weighted portfolio returns were available for scenario analysis.")
+    portfolio_returns.name = "portfolio_return"
+    return portfolio_returns
+
+
 def run_markowitz_optimization_core(
     symbols: list[str] | None = None,
     sector: str | None = None,
@@ -210,6 +228,13 @@ def run_markowitz_optimization_core(
     allow_short: bool = False,
     max_weight: float = 0.6,
     num_frontier_portfolios: int = 3000,
+    run_monte_carlo: bool = False,
+    monte_carlo_days: int = 60,
+    monte_carlo_simulations: int = 500,
+    monte_carlo_block_size: int = 5,
+    monte_carlo_seed: int | None = 42,
+    monte_carlo_scenarios: list[str] | None = None,
+    scenario_overrides: dict[str, dict[str, float]] | None = None,
     finnhub_api_key: str | None = None,
 ) -> dict[str, Any]:
     requested_symbols = _normalize_requested_symbols(symbols or [])
@@ -304,6 +329,23 @@ def run_markowitz_optimization_core(
     if not frontier:
         warnings.append("Efficient frontier could not be computed.")
 
+    scenario_analysis_compact: dict[str, Any] | None = None
+    scenario_analysis_artifact: dict[str, Any] | None = None
+    if run_monte_carlo:
+        portfolio_returns = calculate_weighted_portfolio_returns(price_df, optimal["weights"])
+        scenario_result = run_portfolio_scenario_monte_carlo(
+            portfolio_returns,
+            start_value=10000,
+            days=monte_carlo_days,
+            simulations=monte_carlo_simulations,
+            block_size=monte_carlo_block_size,
+            seed=monte_carlo_seed,
+            scenarios=monte_carlo_scenarios or list(SCENARIO_NAMES),
+            scenario_overrides=scenario_overrides or {},
+        )
+        scenario_analysis_compact = scenario_result["compact"]
+        scenario_analysis_artifact = scenario_result["artifact"]
+
     artifact = {
         "symbols": used_symbols,
         "selection_mode": selection_mode,
@@ -323,10 +365,13 @@ def run_markowitz_optimization_core(
         "data_quality": _data_quality(price_df, requested_symbols, used_symbols),
         "warnings": warnings,
     }
+    if scenario_analysis_artifact is not None:
+        artifact["scenario_analysis"] = scenario_analysis_artifact
+
     artifact_path = save_artifact_json(_markowitz_run_id(used_symbols, objective), artifact)
     artifact_fields = _artifact_fields(artifact_path)
 
-    return {
+    response = {
         "status": "success",
         "tool": "run_markowitz_optimization",
         "objective": objective,
@@ -344,6 +389,9 @@ def run_markowitz_optimization_core(
         **artifact_fields,
         "warnings": warnings,
     }
+    if scenario_analysis_compact is not None:
+        response["scenario_analysis"] = scenario_analysis_compact
+    return response
 
 
 def _optimize(

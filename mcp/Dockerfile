@@ -25,7 +25,7 @@ COPY tools ./tools
 COPY server.py ./
 COPY us_stocks_only_universe.json ./
 
-RUN pip install --no-cache-dir .
+RUN pip install .
 RUN python -c "import talib; print(talib.__version__)"
 
 EXPOSE 8000 8001

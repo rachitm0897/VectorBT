@@ -2,6 +2,17 @@ from rest_framework import serializers
 
 from apps.strategies.registry import SUPPORTED_STRATEGIES
 
+PORTFOLIO_SCENARIOS = ("neutral", "bullish", "bearish", "crash")
+PORTFOLIO_MONTE_CARLO_DEFAULTS = {
+    "enabled": False,
+    "days": 60,
+    "simulations": 500,
+    "block_size": 5,
+    "seed": 42,
+    "scenarios": list(PORTFOLIO_SCENARIOS),
+    "scenario_overrides": {},
+}
+
 
 class MonteCarloSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(default=False)
@@ -51,6 +62,7 @@ class PortfolioOptimizationRequestSerializer(serializers.Serializer):
     allow_short = serializers.BooleanField(required=False, default=False)
     max_weight = serializers.FloatField(required=False, default=0.6, min_value=0.05, max_value=1.0)
     num_frontier_portfolios = serializers.IntegerField(required=False, default=3000, min_value=100, max_value=10000)
+    monte_carlo = serializers.DictField(required=False, default=dict)
 
     def validate_symbols(self, value: list[str]) -> list[str]:
         normalized: list[str] = []
@@ -67,13 +79,106 @@ class PortfolioOptimizationRequestSerializer(serializers.Serializer):
 
         return normalized
 
+    def validate_monte_carlo(self, value) -> dict:
+        return _normalize_portfolio_monte_carlo(value)
+
     def validate(self, attrs):
         symbols = attrs.get("symbols") or []
         sector = str(attrs.get("sector") or "").strip()
         attrs["sector"] = sector
+        attrs["monte_carlo"] = attrs.get("monte_carlo") or dict(PORTFOLIO_MONTE_CARLO_DEFAULTS)
 
         if symbols and len(symbols) < 2:
             raise serializers.ValidationError({"symbols": "At least two symbols are required."})
         if not symbols and not sector:
             raise serializers.ValidationError("Provide either symbols or a sector for portfolio optimization.")
         return attrs
+
+
+def _normalize_portfolio_monte_carlo(value) -> dict:
+    raw = value if isinstance(value, dict) else {}
+    config = {
+        **PORTFOLIO_MONTE_CARLO_DEFAULTS,
+        "scenarios": list(PORTFOLIO_SCENARIOS),
+        "scenario_overrides": {},
+    }
+    config.update({key: item for key, item in raw.items() if item is not None})
+
+    config["enabled"] = bool(config.get("enabled", False))
+    config["days"] = _validated_int(config.get("days"), 1, 252, "invalid_monte_carlo_days")
+    config["simulations"] = _validated_int(
+        config.get("simulations"),
+        100,
+        5000,
+        "invalid_monte_carlo_simulations",
+    )
+    config["block_size"] = _validated_int(config.get("block_size"), 1, 20, "invalid_block_size")
+    config["seed"] = _validated_seed(config.get("seed"))
+    config["scenarios"] = _validated_scenarios(config.get("scenarios"))
+    config["scenario_overrides"] = _validated_scenario_overrides(config.get("scenario_overrides"))
+    return config
+
+
+def _validated_int(value, minimum: int, maximum: int, code: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise serializers.ValidationError(code)
+    if parsed < minimum or parsed > maximum:
+        raise serializers.ValidationError(code)
+    return parsed
+
+
+def _validated_seed(value) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise serializers.ValidationError("invalid_monte_carlo_seed")
+
+
+def _validated_scenarios(value) -> list[str]:
+    if value is None:
+        return list(PORTFOLIO_SCENARIOS)
+    if not isinstance(value, list) or not value:
+        raise serializers.ValidationError("invalid_scenario")
+    scenarios = [str(item or "").strip().lower() for item in value]
+    if any(item not in PORTFOLIO_SCENARIOS for item in scenarios):
+        raise serializers.ValidationError("invalid_scenario")
+    return scenarios
+
+
+def _validated_scenario_overrides(value) -> dict:
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, dict):
+        raise serializers.ValidationError("invalid_scenario_override")
+
+    allowed_fields = {"drift_shift_annual", "volatility_multiplier", "initial_shock_pct"}
+    overrides: dict[str, dict[str, float]] = {}
+    for raw_name, raw_override in value.items():
+        name = str(raw_name or "").strip().lower()
+        if name not in PORTFOLIO_SCENARIOS or not isinstance(raw_override, dict):
+            raise serializers.ValidationError("invalid_scenario_override")
+        if set(raw_override) - allowed_fields:
+            raise serializers.ValidationError("invalid_scenario_override")
+
+        cleaned: dict[str, float] = {}
+        for field, raw_field_value in raw_override.items():
+            if raw_field_value is None or raw_field_value == "":
+                continue
+            try:
+                parsed = float(raw_field_value)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError("invalid_scenario_override")
+            if field == "drift_shift_annual" and not -0.50 <= parsed <= 0.50:
+                raise serializers.ValidationError("invalid_scenario_override")
+            if field == "volatility_multiplier" and not 0.25 <= parsed <= 4.0:
+                raise serializers.ValidationError("invalid_scenario_override")
+            if field == "initial_shock_pct" and not -0.80 <= parsed <= 0.80:
+                raise serializers.ValidationError("invalid_scenario_override")
+            cleaned[field] = parsed
+        if cleaned:
+            overrides[name] = cleaned
+    return overrides

@@ -6,6 +6,7 @@ import SectionCard from "../layout/SectionCard";
 import CorrelationHeatmap from "./CorrelationHeatmap";
 import EfficientFrontierChart from "./EfficientFrontierChart";
 import PortfolioMetricsCards from "./PortfolioMetricsCards";
+import PortfolioScenarioAnalysis from "./PortfolioScenarioAnalysis";
 import PortfolioWeightsChart from "./PortfolioWeightsChart";
 
 type PortfolioResultDashboardProps = {
@@ -46,6 +47,7 @@ export default function PortfolioResultDashboard({
         <EfficientFrontierChart result={result} />
         <PortfolioWeightsChart result={result} />
       </div>
+      <PortfolioScenarioAnalysis result={result} />
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <CorrelationHeatmap result={result} />
         <SectionCard title="Portfolio Details" subtitle={result.objective || "markowitz"}>

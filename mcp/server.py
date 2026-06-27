@@ -25,6 +25,7 @@ from tools.portfolio_optimization import run_markowitz_optimization_core
 from tools.schemas import (
     IndicatorBatchRequest,
     IndicatorRequest,
+    MarkowitzOptimizationRequest,
     MarketDataRequest,
     MonteCarloRequest,
     StrategyBacktestRequest,
@@ -650,28 +651,84 @@ def run_markowitz_optimization(
     allow_short: bool = False,
     max_weight: float = 0.6,
     num_frontier_portfolios: int = 3000,
+    run_monte_carlo: bool = False,
+    monte_carlo_days: int = 60,
+    monte_carlo_simulations: int = 500,
+    monte_carlo_block_size: int = 5,
+    monte_carlo_seed: int | None = 42,
+    monte_carlo_scenarios: list[str] | None = None,
+    scenario_overrides: dict[str, Any] | None = None,
     finnhub_api_key: str | None = None,
 ) -> dict[str, Any]:
     """Run Markowitz mean-variance portfolio optimization for selected US stocks."""
     try:
-        return run_markowitz_optimization_core(
-            symbols=symbols,
-            sector=sector,
-            lookback=lookback,
-            resolution=resolution,
-            objective=objective,
-            risk_free_rate=risk_free_rate,
-            allow_short=allow_short,
-            max_weight=max_weight,
-            num_frontier_portfolios=num_frontier_portfolios,
-            finnhub_api_key=finnhub_api_key,
+        request = parse_request(
+            MarkowitzOptimizationRequest,
+            {
+                "symbols": symbols,
+                "sector": sector,
+                "lookback": lookback,
+                "resolution": resolution,
+                "objective": objective,
+                "risk_free_rate": risk_free_rate,
+                "allow_short": allow_short,
+                "max_weight": max_weight,
+                "num_frontier_portfolios": num_frontier_portfolios,
+                "run_monte_carlo": run_monte_carlo,
+                "monte_carlo_days": monte_carlo_days,
+                "monte_carlo_simulations": monte_carlo_simulations,
+                "monte_carlo_block_size": monte_carlo_block_size,
+                "monte_carlo_seed": monte_carlo_seed,
+                "monte_carlo_scenarios": monte_carlo_scenarios or [
+                    "neutral",
+                    "bullish",
+                    "bearish",
+                    "crash",
+                ],
+                "scenario_overrides": scenario_overrides or {},
+                "finnhub_api_key": finnhub_api_key,
+            },
         )
+        return run_markowitz_optimization_core(
+            symbols=request.symbols,
+            sector=request.sector,
+            lookback=request.lookback,
+            resolution=request.resolution,
+            objective=request.objective,
+            risk_free_rate=request.risk_free_rate,
+            allow_short=request.allow_short,
+            max_weight=request.max_weight,
+            num_frontier_portfolios=request.num_frontier_portfolios,
+            run_monte_carlo=request.run_monte_carlo,
+            monte_carlo_days=request.monte_carlo_days,
+            monte_carlo_simulations=request.monte_carlo_simulations,
+            monte_carlo_block_size=request.monte_carlo_block_size,
+            monte_carlo_seed=request.monte_carlo_seed,
+            monte_carlo_scenarios=list(request.monte_carlo_scenarios),
+            scenario_overrides={
+                name: _scenario_override_dict(override)
+                for name, override in request.scenario_overrides.items()
+            },
+            finnhub_api_key=request.finnhub_api_key,
+        )
+    except ValidationError as exc:
+        return _validation_error_response(exc)
     except ValueError as exc:
         return _value_error_response(exc, "markowitz_error")
     except RuntimeError as exc:
         return _error_response(str(exc), ["runtime_error"])
     except Exception as exc:
         return _unexpected_error_response("portfolio optimization", exc)
+
+
+def _scenario_override_dict(override: Any) -> dict[str, Any]:
+    if hasattr(override, "model_dump"):
+        data = override.model_dump()
+    elif hasattr(override, "dict"):
+        data = override.dict()
+    else:
+        data = dict(override or {})
+    return {key: value for key, value in data.items() if value is not None}
 
 
 async def _health(_request):
