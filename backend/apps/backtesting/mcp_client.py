@@ -172,6 +172,17 @@ def fetch_remote_stocks_by_sector(sector: str | None = None) -> dict[str, Any]:
     }
 
 
+def resolve_remote_sector_symbols(sector: str) -> dict[str, Any]:
+    compact = call_mcp_tool("resolve_symbols_for_sector", {"sector": sector})
+    _raise_for_tool_error(compact)
+    return {
+        "status": "success",
+        "sector": compact.get("sector") or sector,
+        "symbols": compact.get("symbols") if isinstance(compact.get("symbols"), list) else [],
+        "count": int(compact.get("count") or len(compact.get("symbols") or [])),
+    }
+
+
 def search_remote_strategy_registry(
     query: str | None = None,
     family: str | None = None,
@@ -192,6 +203,12 @@ def search_remote_strategy_registry(
         "search_strategy_registry",
         {key: value for key, value in arguments.items() if value is not None},
     )
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def sync_remote_strategy_registry() -> dict[str, Any]:
+    compact = call_mcp_tool("sync_strategy_registry", {})
     _raise_for_tool_error(compact)
     return compact
 
@@ -240,6 +257,42 @@ def run_remote_multi_stock_research(
     if finnhub_api_key:
         arguments["finnhub_api_key"] = finnhub_api_key
     compact = call_mcp_tool("run_multi_stock_research", arguments)
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def run_remote_raw_markowitz_research(
+    validated_request: dict[str, Any],
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    arguments = _raw_markowitz_research_arguments(validated_request, finnhub_api_key)
+    compact = call_mcp_tool("run_raw_markowitz_optimization", arguments)
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def run_remote_raw_asset_monte_carlo(
+    validated_request: dict[str, Any],
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    monte_carlo = {
+        "enabled": True,
+        "days": int(validated_request.get("days", 60)),
+        "simulations": int(validated_request.get("simulations", 500)),
+        "method": validated_request.get("method", "bootstrap"),
+        "seed": validated_request.get("seed", 42),
+        "mode": "raw_asset_returns",
+    }
+    arguments = {
+        "symbol": validated_request["symbol"],
+        "lookback": validated_request.get("lookback", "2y"),
+        "resolution": validated_request.get("resolution", "D"),
+        "start_value": float(validated_request.get("start_value", 10000.0)),
+        "monte_carlo": monte_carlo,
+    }
+    if finnhub_api_key:
+        arguments["finnhub_api_key"] = finnhub_api_key
+    compact = call_mcp_tool("run_raw_asset_monte_carlo", arguments)
     _raise_for_tool_error(compact)
     return compact
 
@@ -402,6 +455,51 @@ def _portfolio_tool_arguments(validated_request: dict[str, Any], finnhub_api_key
     if finnhub_api_key:
         arguments["finnhub_api_key"] = finnhub_api_key
     return arguments
+
+
+def _raw_markowitz_research_arguments(validated_request: dict[str, Any], finnhub_api_key: str | None) -> dict[str, Any]:
+    optimization = {
+        "objective": validated_request.get("objective", "max_sharpe"),
+        "risk_free_rate": float(validated_request.get("risk_free_rate", 0.0)),
+        "target_return": validated_request.get("target_return"),
+        "target_volatility": validated_request.get("target_volatility"),
+        "allow_short": bool(validated_request.get("allow_short", False)),
+        "min_weight": validated_request.get("min_weight"),
+        "max_weight": float(validated_request.get("max_weight", 0.6)),
+        "gross_exposure_limit": float(validated_request.get("gross_exposure_limit", 1.0)),
+        "net_exposure": float(validated_request.get("net_exposure", 1.0)),
+        "covariance_regularization": float(validated_request.get("covariance_regularization", 0.000001)),
+        "num_frontier_portfolios": int(validated_request.get("num_frontier_portfolios", 1000)),
+    }
+    optimization = {key: value for key, value in optimization.items() if value is not None}
+    monte_carlo = _research_monte_carlo_payload(validated_request.get("monte_carlo") or {}, "raw_asset_returns")
+    arguments = {
+        "symbols": list(validated_request.get("symbols") or []),
+        "sector": validated_request.get("sector") or None,
+        "lookback": validated_request.get("lookback", "2y"),
+        "resolution": validated_request.get("resolution", "D"),
+        "initial_cash": float(validated_request.get("initial_cash", 10000.0)),
+        "fees": float(validated_request.get("fees", 0.001)),
+        "optimization": optimization,
+        "monte_carlo": monte_carlo,
+    }
+    if finnhub_api_key:
+        arguments["finnhub_api_key"] = finnhub_api_key
+    return arguments
+
+
+def _research_monte_carlo_payload(value: dict[str, Any], mode: str) -> dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    return {
+        "enabled": bool(raw.get("enabled", True)),
+        "method": raw.get("method", "bootstrap"),
+        "mode": mode,
+        "days": int(raw.get("days", raw.get("horizon_days", 60))),
+        "simulations": int(raw.get("simulations", raw.get("simulation_count", 500))),
+        "block_size": int(raw.get("block_size", 5)),
+        "seed": raw.get("seed", 42),
+        "thresholds": raw.get("thresholds", raw.get("loss_thresholds", [-0.10, -0.20])),
+    }
 
 
 def _factor_tool_arguments(validated_request: dict[str, Any], finnhub_api_key: str | None) -> dict[str, Any]:
@@ -804,6 +902,10 @@ def _request_type_for_tool(tool_name: str) -> str | None:
         return "single_stock_research"
     if tool_name == "run_multi_stock_research":
         return "multi_stock_research"
+    if tool_name == "run_raw_markowitz_optimization":
+        return "raw_asset_markowitz"
+    if tool_name == "run_raw_asset_monte_carlo":
+        return "raw_asset_monte_carlo"
     if tool_name in {"discover_strategy_candidates", "review_strategy_candidate", "process_approved_strategy"}:
         return "strategy_discovery"
     if tool_name in {"search_strategy_registry", "get_strategy_details"}:

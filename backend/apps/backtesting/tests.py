@@ -4,10 +4,17 @@ from django.test import SimpleTestCase, override_settings
 
 from apps.backtesting.mcp_client import (
     discover_remote_research_name,
+    resolve_remote_sector_symbols,
+    run_remote_raw_asset_monte_carlo,
+    run_remote_raw_markowitz_research,
     run_remote_factor_portfolio,
     run_remote_portfolio_optimization,
 )
-from apps.backtesting.serializers import FactorPortfolioRequestSerializer, PortfolioOptimizationRequestSerializer
+from apps.backtesting.serializers import (
+    FactorPortfolioRequestSerializer,
+    PortfolioOptimizationRequestSerializer,
+    RawMonteCarloRequestSerializer,
+)
 
 
 class PortfolioMCPClientTests(SimpleTestCase):
@@ -227,6 +234,104 @@ class PortfolioMCPClientTests(SimpleTestCase):
         self.assertEqual(result["scenario_analysis"]["scenarios"][0]["name"], "neutral")
         self.assertIn("Remote MCP artifact was not accessible from backend.", result["warnings"])
 
+    @override_settings(MCP_ALLOWED_TOOLS={"run_raw_markowitz_optimization"})
+    @patch("apps.backtesting.mcp_client.call_mcp_tool")
+    def test_raw_markowitz_routes_editable_optimizer_and_monte_carlo_settings(self, call_mcp_tool):
+        call_mcp_tool.return_value = {
+            "status": "success",
+            "workflow_type": "raw_asset_markowitz",
+            "run_id": "raw_markowitz_test",
+            "allocations": {"weights": {"AAPL": 0.5, "MSFT": 0.5}},
+        }
+
+        run_remote_raw_markowitz_research(
+            {
+                "symbols": ["AAPL", "MSFT"],
+                "sector": "",
+                "lookback": "2y",
+                "resolution": "D",
+                "initial_cash": 25000.0,
+                "fees": 0.001,
+                "objective": "target_return",
+                "risk_free_rate": 0.03,
+                "target_return": 0.12,
+                "target_volatility": None,
+                "allow_short": True,
+                "min_weight": -0.2,
+                "max_weight": 0.8,
+                "gross_exposure_limit": 1.4,
+                "net_exposure": 1.0,
+                "covariance_regularization": 0.0002,
+                "num_frontier_portfolios": 500,
+                "monte_carlo": {
+                    "enabled": True,
+                    "method": "block_bootstrap",
+                    "days": 90,
+                    "simulations": 700,
+                    "block_size": 7,
+                    "seed": 11,
+                    "thresholds": [-0.05, -0.20],
+                },
+            },
+            finnhub_api_key="finnhub",
+        )
+
+        tool_name, arguments = call_mcp_tool.call_args.args
+        self.assertEqual(tool_name, "run_raw_markowitz_optimization")
+        self.assertEqual(arguments["initial_cash"], 25000.0)
+        self.assertEqual(arguments["optimization"]["objective"], "target_return")
+        self.assertEqual(arguments["optimization"]["min_weight"], -0.2)
+        self.assertEqual(arguments["optimization"]["gross_exposure_limit"], 1.4)
+        self.assertEqual(arguments["monte_carlo"]["method"], "block_bootstrap")
+        self.assertEqual(arguments["monte_carlo"]["days"], 90)
+        self.assertEqual(arguments["monte_carlo"]["thresholds"], [-0.05, -0.20])
+
+    def test_portfolio_serializer_accepts_target_objectives_and_bounds(self):
+        serializer = PortfolioOptimizationRequestSerializer(
+            data={
+                "symbols": ["AAPL", "MSFT"],
+                "objective": "target_volatility",
+                "target_volatility": 0.18,
+                "allow_short": True,
+                "min_weight": -0.15,
+                "max_weight": 0.75,
+                "gross_exposure_limit": 1.5,
+                "net_exposure": 1.0,
+                "covariance_regularization": 0.0001,
+                "monte_carlo": {"enabled": True, "horizon_days": 45, "simulation_count": 400},
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["objective"], "target_volatility")
+        self.assertEqual(serializer.validated_data["monte_carlo"]["days"], 45)
+        self.assertEqual(serializer.validated_data["monte_carlo"]["simulations"], 400)
+
+    @override_settings(MCP_ALLOWED_TOOLS={"run_raw_asset_monte_carlo"})
+    @patch("apps.backtesting.mcp_client.call_mcp_tool")
+    def test_raw_asset_monte_carlo_routes_user_settings(self, call_mcp_tool):
+        call_mcp_tool.return_value = {"status": "success", "workflow_type": "raw_asset_monte_carlo"}
+
+        run_remote_raw_asset_monte_carlo(
+            {
+                "symbol": "AAPL",
+                "lookback": "1y",
+                "resolution": "D",
+                "start_value": 15000.0,
+                "days": 40,
+                "simulations": 300,
+                "method": "block_bootstrap",
+                "seed": 9,
+            },
+            finnhub_api_key="finnhub",
+        )
+
+        tool_name, arguments = call_mcp_tool.call_args.args
+        self.assertEqual(tool_name, "run_raw_asset_monte_carlo")
+        self.assertEqual(arguments["monte_carlo"]["days"], 40)
+        self.assertEqual(arguments["monte_carlo"]["simulations"], 300)
+        self.assertEqual(arguments["monte_carlo"]["method"], "block_bootstrap")
+
 
 class MCPDiscoveryTests(SimpleTestCase):
     @patch("apps.backtesting.mcp_client.call_mcp_tool")
@@ -273,6 +378,35 @@ class MCPDiscoveryTests(SimpleTestCase):
 
         self.assertEqual(result["kind"], "strategy")
         call_mcp_tool.assert_called_once_with("list_strategies", {})
+
+    @override_settings(MCP_ALLOWED_TOOLS={"resolve_symbols_for_sector"})
+    @patch("apps.backtesting.mcp_client.call_mcp_tool")
+    def test_sector_symbol_resolution_uses_mcp_tool(self, call_mcp_tool):
+        call_mcp_tool.return_value = {
+            "status": "success",
+            "sector": "Technology",
+            "symbols": ["AAPL", "MSFT"],
+            "count": 2,
+        }
+
+        result = resolve_remote_sector_symbols("Technology")
+
+        self.assertEqual(result["symbols"], ["AAPL", "MSFT"])
+        call_mcp_tool.assert_called_once_with("resolve_symbols_for_sector", {"sector": "Technology"})
+
+    def test_raw_monte_carlo_serializer_accepts_user_settings(self):
+        serializer = RawMonteCarloRequestSerializer(
+            data={
+                "symbol": "AAPL",
+                "days": 30,
+                "simulations": 250,
+                "method": "block_bootstrap",
+                "seed": 123,
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["method"], "block_bootstrap")
 
 
 class FactorPortfolioMCPClientTests(SimpleTestCase):

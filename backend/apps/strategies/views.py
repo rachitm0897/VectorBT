@@ -12,6 +12,7 @@ from apps.backtesting.mcp_client import (
     process_remote_approved_strategy,
     review_remote_strategy_candidate,
     search_remote_strategy_registry,
+    sync_remote_strategy_registry,
 )
 
 
@@ -29,9 +30,43 @@ class StrategyRegistryAPIView(APIView):
                 readiness=request.query_params.get("readiness"),
                 execution_type=request.query_params.get("execution_type"),
                 executable_only=str(request.query_params.get("executable_only", "false")).lower() == "true",
-                limit=int(request.query_params.get("limit", 100)),
+                limit=int(request.query_params.get("limit", 1000)),
             )
             return Response(result, status=status.HTTP_200_OK)
+        except MCPClientError as exc:
+            return _error_response(str(exc), exc.code, status.HTTP_502_BAD_GATEWAY)
+
+
+class StrategyRegistryStatusAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, _request):
+        if not settings.MCP_ENABLED:
+            return _error_response("MCP server is disabled.", "mcp_disabled", status.HTTP_503_SERVICE_UNAVAILABLE)
+        try:
+            result = search_remote_strategy_registry(limit=1)
+            return Response(
+                {
+                    "status": "success",
+                    "summary": result.get("summary") or {},
+                    "total_count": result.get("total_count", result.get("count", 0)),
+                },
+                status=status.HTTP_200_OK,
+            )
+        except MCPClientError as exc:
+            return _error_response(str(exc), exc.code, status.HTTP_502_BAD_GATEWAY)
+
+
+class StrategyRegistrySyncAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, _request):
+        if not settings.MCP_ENABLED:
+            return _error_response("MCP server is disabled.", "mcp_disabled", status.HTTP_503_SERVICE_UNAVAILABLE)
+        try:
+            return Response(sync_remote_strategy_registry(), status=status.HTTP_200_OK)
         except MCPClientError as exc:
             return _error_response(str(exc), exc.code, status.HTTP_502_BAD_GATEWAY)
 

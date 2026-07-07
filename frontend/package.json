@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "test:mcp-ui": "node --test scripts/test-mcp-ui-contract.mjs",
     "test:portfolio": "node --test scripts/test-portfolio-view-model.mjs"
   },
   "dependencies": {

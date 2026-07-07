@@ -24,11 +24,25 @@ class StrategyRegistryService:
 
     def all_strategies(self, refresh: bool = False) -> list[CanonicalStrategy]:
         if refresh:
-            _load_all_strategies.cache_clear()
-        return _load_all_strategies(str(self.profiling_root))
+            _load_registry_snapshot.cache_clear()
+        return list(_load_registry_snapshot(str(self.profiling_root))["strategies"])
+
+    def import_status(self) -> dict[str, Any]:
+        snapshot = _load_registry_snapshot(str(self.profiling_root))
+        strategies = list(snapshot["strategies"])
+        failures = list(snapshot["failures"])
+        return {
+            "profiling_root": str(self.profiling_root),
+            "total_strategies": len(strategies),
+            "built_in_strategies": sum(1 for strategy in strategies if strategy.source_type == "built_in"),
+            "imported_strategies": sum(1 for strategy in strategies if strategy.source_type != "built_in"),
+            "failed_imports": len(failures),
+            "failures": failures,
+            "source": "stock_strategy_profilling",
+        }
 
     def sync_import(self) -> StrategyImportResult:
-        _load_all_strategies.cache_clear()
+        _load_registry_snapshot.cache_clear()
         return self.importer.import_from_stock_strategy_profilling(self.profiling_root)
 
     def get(self, strategy_id: str) -> CanonicalStrategy:
@@ -69,16 +83,17 @@ class StrategyRegistryService:
 
 
 @lru_cache(maxsize=4)
-def _load_all_strategies(profiling_root: str) -> list[CanonicalStrategy]:
+def _load_registry_snapshot(profiling_root: str) -> dict[str, Any]:
     strategies = _prototype_strategies()
-    imported, _failures = _load_imported_strategies(Path(profiling_root))
+    imported, failures = _load_imported_strategies(Path(profiling_root))
     existing = {strategy.strategy_id for strategy in strategies}
     strategies.extend(strategy for strategy in imported if strategy.strategy_id not in existing)
-    return strategies
+    return {"strategies": strategies, "failures": failures}
 
 
 def _load_imported_strategies(root: Path) -> tuple[list[CanonicalStrategy], list[dict[str, Any]]]:
-    return StrategyImporter().import_from_stock_strategy_profilling(root).imported, []
+    result = StrategyImporter().import_from_stock_strategy_profilling(root)
+    return result.imported, result.failures
 
 
 def _prototype_strategies() -> list[CanonicalStrategy]:
@@ -134,4 +149,3 @@ def _prototype_strategies() -> list[CanonicalStrategy]:
 
 def _normalize_id(value: str) -> str:
     return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-

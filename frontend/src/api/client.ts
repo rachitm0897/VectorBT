@@ -35,14 +35,20 @@ export type StrategyRegistryItem = {
   aliases?: string[];
   family?: string;
   description?: string;
+  source_type?: string;
   horizon_bucket?: string | null;
   execution_type?: "single_asset_signal" | "cross_sectional_ranking" | "portfolio_strategy" | "research_only" | string;
   readiness?: "BACKTEST_READY" | "MISSING_DATA" | "RULES_INCOMPLETE" | "BACKTEST_FAILED" | "RESEARCH_ONLY" | "DEPRECATED" | string;
   runnable?: boolean;
+  executable?: boolean;
+  usability_status?: "executable" | "catalogue_only" | "missing_data" | "incomplete_rules" | "failed" | "deprecated" | string;
+  status_label?: string;
   long_only?: boolean;
   long_short?: boolean;
   template_hint?: string;
   final_score?: number | null;
+  active?: boolean;
+  deprecated?: boolean;
 };
 
 export type StrategyDetails = StrategyRegistryItem & {
@@ -68,9 +74,28 @@ export type StrategyDetails = StrategyRegistryItem & {
 export type StrategyRegistryResponse = {
   status: "success" | "error";
   count?: number;
+  total_count?: number;
+  summary?: StrategyRegistrySummary;
   strategies?: StrategyRegistryItem[];
   message?: string;
   errors?: string[];
+};
+
+export type StrategyRegistrySummary = {
+  generated_at?: string;
+  total_strategies?: number;
+  executable_strategies?: number;
+  catalogue_only_strategies?: number;
+  imported_strategies?: number;
+  built_in_strategies?: number;
+  failed_imports?: number;
+  missing_data_strategies?: number;
+  incomplete_rule_strategies?: number;
+  failed_strategies?: number;
+  deprecated_strategies?: number;
+  readiness_counts?: Record<string, number>;
+  execution_type_counts?: Record<string, number>;
+  import?: Record<string, unknown>;
 };
 
 export type StrategyDetailsResponse = {
@@ -136,9 +161,12 @@ export type SingleStockResearchRequest = {
   fees: number;
   monte_carlo?: {
     enabled?: boolean;
-    horizon_days?: number;
+    days?: number;
     simulations?: number;
     seed?: number | null;
+    method?: "bootstrap" | "block_bootstrap";
+    block_size?: number;
+    thresholds?: number[];
     mode?: "strategy_returns";
   };
 };
@@ -154,9 +182,12 @@ export type MultiStockResearchRequest = {
   optimization?: Record<string, unknown>;
   monte_carlo?: {
     enabled?: boolean;
-    horizon_days?: number;
+    days?: number;
     simulations?: number;
     seed?: number | null;
+    method?: "bootstrap" | "block_bootstrap";
+    block_size?: number;
+    thresholds?: number[];
     mode?: "portfolio_returns";
   };
 };
@@ -199,12 +230,32 @@ export type PortfolioOptimizationRequest = {
   sector?: string;
   lookback: "1mo" | "6mo" | "1y" | "2y" | "5y";
   resolution: "D";
-  objective: "max_sharpe" | "min_volatility";
+  initial_cash?: number;
+  fees?: number;
+  objective: "max_sharpe" | "min_volatility" | "target_return" | "target_volatility";
   risk_free_rate: number;
+  target_return?: number | null;
+  target_volatility?: number | null;
   allow_short: boolean;
+  min_weight?: number | null;
   max_weight: number;
+  gross_exposure_limit?: number;
+  net_exposure?: number;
+  covariance_regularization?: number;
+  covariance_method?: string;
   num_frontier_portfolios: number;
   monte_carlo?: PortfolioMonteCarloConfig;
+};
+
+export type RawAssetMonteCarloRequest = {
+  symbol: string;
+  lookback: "1mo" | "6mo" | "1y" | "2y" | "5y";
+  resolution: "D";
+  start_value: number;
+  days: number;
+  simulations: number;
+  method: "bootstrap" | "block_bootstrap";
+  seed?: number | null;
 };
 
 export type FactorModelConfiguration = {
@@ -554,6 +605,44 @@ export type AnalyticsStatus = {
   error: string | null;
 };
 
+export type SystemHealth = {
+  status: "success" | "error";
+  backend?: Record<string, unknown>;
+  mcp?: MCPStatus;
+  analytics?: AnalyticsStatus;
+  metabase?: Record<string, unknown>;
+  registry?: StrategyRegistrySummary | Record<string, unknown>;
+  message?: string;
+  errors?: string[];
+};
+
+export type McpToolInventory = {
+  status: "success" | "error";
+  mcp?: MCPStatus;
+  public_tools?: Array<{ name: string; status: string }>;
+  legacy_tools?: Array<{ name: string; status: string }>;
+  message?: string;
+};
+
+export type SystemDiagnostics = {
+  status: "success" | "error";
+  recent_mcp_calls?: Array<Record<string, unknown>>;
+  recent_errors?: Array<Record<string, unknown>>;
+  cache?: Record<string, unknown>;
+  artifacts?: Record<string, unknown>;
+  database?: AnalyticsStatus | Record<string, unknown>;
+};
+
+export type ResearchRunSummary = {
+  run_id?: string;
+  workflow_type?: string;
+  status?: string;
+  strategy_id?: string | null;
+  symbols?: string[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 const DEFAULT_API_BASE_URL = import.meta.env.PROD ? "https://qfsplatform.com/insta_backtester" : "http://localhost:8000/api";
 
 function normalizeApiBaseUrl(value: string | undefined): string {
@@ -704,6 +793,33 @@ export async function fetchStrategyRegistry(options: {
   if (!response.ok || data.status === "error") {
     const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
     throw new Error(`${data.message || "Strategy registry request failed."}${details}`);
+  }
+  return data;
+}
+
+export async function fetchStrategyRegistryStatus(): Promise<{ status: "success" | "error"; summary?: StrategyRegistrySummary; total_count?: number }> {
+  const response = await fetch(buildApiUrl("/strategies/status/"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = (await response.json()) as { status: "success" | "error"; summary?: StrategyRegistrySummary; total_count?: number; message?: string; errors?: string[] };
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Strategy registry status request failed."}${details}`);
+  }
+  return data;
+}
+
+export async function syncStrategyRegistry(): Promise<Record<string, unknown>> {
+  const response = await fetch(buildApiUrl("/strategies/sync/"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const data = (await response.json()) as Record<string, unknown>;
+  if (!response.ok || data.status === "error") {
+    const errors = Array.isArray(data.errors) ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${String(data.message || "Strategy registry sync failed.")}${errors}`);
   }
   return data;
 }
@@ -865,6 +981,80 @@ export async function fetchStocksBySector(sector?: string): Promise<StockUnivers
     throw new Error(`${data.message || "Universe stocks request failed."}${details}`);
   }
   return Array.isArray(data.stocks) ? data.stocks : [];
+}
+
+export async function resolveSymbolsForSector(sector: string): Promise<{ sector: string; symbols: string[]; count: number }> {
+  const response = await fetch(buildApiUrl(`/universe/resolve-sector/?sector=${encodeURIComponent(sector)}`), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = (await response.json()) as {
+    status?: string;
+    sector?: string;
+    symbols?: string[];
+    count?: number;
+    errors?: string[];
+    message?: string;
+  };
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Sector symbol resolution failed."}${details}`);
+  }
+  return {
+    sector: data.sector || sector,
+    symbols: Array.isArray(data.symbols) ? data.symbols : [],
+    count: Number(data.count || data.symbols?.length || 0),
+  };
+}
+
+export async function runRawMarkowitzResearch(
+  payload: PortfolioOptimizationRequest,
+  apiKeys?: ApiKeys,
+): Promise<ResearchResultEnvelope> {
+  const response = await fetch(buildApiUrl("/research/portfolio/raw/"), {
+    method: "POST",
+    headers: buildFinnhubRequestHeaders(apiKeys),
+    body: JSON.stringify({ ...payload, ...buildConfigPayload(apiKeys, false) }),
+  });
+  let data: ResearchResultEnvelope | null = null;
+  try {
+    data = (await response.json()) as ResearchResultEnvelope;
+  } catch {
+    data = null;
+  }
+  if (!data) {
+    throw new Error("Backend returned an empty raw Markowitz response.");
+  }
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Raw Markowitz optimization failed."}${details}`);
+  }
+  return data;
+}
+
+export async function runRawAssetMonteCarlo(
+  payload: RawAssetMonteCarloRequest,
+  apiKeys?: ApiKeys,
+): Promise<ResearchResultEnvelope> {
+  const response = await fetch(buildApiUrl("/research/monte-carlo/raw/"), {
+    method: "POST",
+    headers: buildFinnhubRequestHeaders(apiKeys),
+    body: JSON.stringify({ ...payload, ...buildConfigPayload(apiKeys, false) }),
+  });
+  let data: ResearchResultEnvelope | null = null;
+  try {
+    data = (await response.json()) as ResearchResultEnvelope;
+  } catch {
+    data = null;
+  }
+  if (!data) {
+    throw new Error("Backend returned an empty raw Monte Carlo response.");
+  }
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Raw Monte Carlo failed."}${details}`);
+  }
+  return data;
 }
 
 export async function runPortfolioOptimization(
@@ -1048,6 +1238,68 @@ export async function getAnalyticsStatus(): Promise<AnalyticsStatus> {
   const data = (await response.json()) as AnalyticsStatus;
   if (!response.ok) {
     throw new Error(data?.error || "Analytics status request failed.");
+  }
+  return data;
+}
+
+export async function getSystemHealth(): Promise<SystemHealth> {
+  const response = await fetch(buildApiUrl("/system/health/"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = (await response.json()) as SystemHealth;
+  if (!response.ok || data.status === "error") {
+    throw new Error(data.message || "System health request failed.");
+  }
+  return data;
+}
+
+export async function getMcpToolInventory(): Promise<McpToolInventory> {
+  const response = await fetch(buildApiUrl("/mcp/tools/"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = (await response.json()) as McpToolInventory;
+  if (!response.ok || data.status === "error") {
+    throw new Error(data.message || "MCP tool inventory request failed.");
+  }
+  return data;
+}
+
+export async function getSystemDiagnostics(): Promise<SystemDiagnostics> {
+  const response = await fetch(buildApiUrl("/system/diagnostics/"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = (await response.json()) as SystemDiagnostics;
+  if (!response.ok || data.status === "error") {
+    throw new Error("System diagnostics request failed.");
+  }
+  return data;
+}
+
+export async function listResearchRuns(limit = 25): Promise<{ status: "success" | "error"; runs: ResearchRunSummary[] }> {
+  const response = await fetch(buildApiUrl(`/research/runs/?limit=${encodeURIComponent(String(limit))}`), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = (await response.json()) as { status: "success" | "error"; runs?: ResearchRunSummary[]; message?: string; errors?: string[] };
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Research run listing failed."}${details}`);
+  }
+  return { status: "success", runs: data.runs || [] };
+}
+
+export async function getResearchRun(runId: string): Promise<{ status: "success" | "error"; run?: ResearchResultEnvelope }> {
+  const response = await fetch(buildApiUrl(`/research/runs/${encodeURIComponent(runId)}/`), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = (await response.json()) as { status: "success" | "error"; run?: ResearchResultEnvelope; message?: string; errors?: string[] };
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Research run lookup failed."}${details}`);
   }
   return data;
 }

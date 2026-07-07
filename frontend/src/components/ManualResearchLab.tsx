@@ -105,7 +105,7 @@ export default function ManualResearchLab({
         fees,
         monte_carlo: {
           enabled: true,
-          horizon_days: monteCarloDays,
+          days: monteCarloDays,
           simulations,
           mode: "strategy_returns",
         },
@@ -123,7 +123,7 @@ export default function ManualResearchLab({
       optimization: JSON.parse(optimizationText || "{}") as Record<string, unknown>,
       monte_carlo: {
         enabled: true,
-        horizon_days: monteCarloDays,
+        days: monteCarloDays,
         simulations,
         mode: "portfolio_returns",
       },

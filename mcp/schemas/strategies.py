@@ -89,7 +89,7 @@ class StrategySearchRequest(StrictModel):
     readiness: ReadinessStatus | None = None
     execution_type: ExecutionType | None = None
     executable_only: bool = False
-    limit: int = Field(default=25, ge=1, le=200)
+    limit: int = Field(default=1000, ge=1, le=2000)
 
 
 class StrategyDetailsRequest(StrictModel):
