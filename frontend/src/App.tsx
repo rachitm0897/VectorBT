@@ -3,30 +3,39 @@ import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_URL,
   METABASE_URL,
+  fetchStrategyRegistry,
   getAnalyticsStatus,
   getMcpStatus,
-  runBacktest,
-  runChat,
+  runChatStream,
   runFactorPortfolio,
+  runMultiStockResearch,
   runPortfolioOptimization,
+  runSingleStockResearch,
   type ApiKeys,
   type AnalyticsStatus,
   type BacktestRequest,
   type BacktestResult,
+  type ChatStreamEvent,
   type FactorPortfolioRequest,
   type FactorPortfolioResult,
   type MCPStatus,
+  type MultiStockResearchRequest,
   type PortfolioOptimizationRequest,
   type PortfolioResult,
-  type StrategyName,
+  type ResearchResultEnvelope,
+  type SingleStockResearchRequest,
+  type StrategyRegistryItem,
 } from "./api/client";
+import A2UITemplateRenderer from "./components/A2UITemplateRenderer";
 import ApiKeyPanel from "./components/ApiKeyPanel";
-import BacktestForm, { buildBacktestPayload } from "./components/BacktestForm";
 import ChatPanel from "./components/ChatPanel";
 import FactorPortfolioPanel from "./components/FactorPortfolioPanel";
+import ManualResearchLab from "./components/ManualResearchLab";
 import PortfolioOptimizerPanel from "./components/PortfolioOptimizerPanel";
+import StrategyDiscoveryLab from "./components/StrategyDiscoveryLab";
 import AppShell from "./components/layout/AppShell";
 import CollapsiblePanel from "./components/layout/CollapsiblePanel";
+import EmptyState from "./components/layout/EmptyState";
 import Sidebar from "./components/layout/Sidebar";
 import AnalyticsStatusPanel from "./components/panels/AnalyticsStatusPanel";
 import McpStatusPanel from "./components/panels/McpStatusPanel";
@@ -42,30 +51,30 @@ const emptyApiKeys: ApiKeys = {
   model: DEFAULT_CHAT_MODEL,
   finnhubApiKey: "",
 };
-const defaultParameters: Record<StrategyName, string> = {
-  sma_crossover: JSON.stringify({ fast_window: 20, slow_window: 50 }, null, 2),
-  rsi_mean_reversion: JSON.stringify({ rsi_window: 14, lower: 30, upper: 70 }, null, 2),
-  bollinger_reversion: JSON.stringify({ window: 20, std_dev: 2 }, null, 2),
-  macd_crossover: JSON.stringify({ fast_period: 12, slow_period: 26, signal_period: 9 }, null, 2),
-};
+
+type ActiveWorkflow = "research" | "backtest" | "portfolio" | "factor" | "empty";
 
 export default function App() {
-  const [symbol, setSymbol] = useState("AAPL");
-  const [strategy, setStrategy] = useState<StrategyName>("sma_crossover");
-  const [parametersText, setParametersText] = useState(defaultParameters.sma_crossover);
-  const [lookback, setLookback] = useState("2y");
-  const [monteCarloDays, setMonteCarloDays] = useState(60);
-  const [initialCash, setInitialCash] = useState(10000);
-  const [fees, setFees] = useState(0.001);
+  const [strategies, setStrategies] = useState<StrategyRegistryItem[]>([]);
+  const [strategyError, setStrategyError] = useState<string | null>(null);
+  const [isStrategyLoading, setIsStrategyLoading] = useState(false);
+  const [researchEnvelope, setResearchEnvelope] = useState<ResearchResultEnvelope | null>(null);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [portfolioResult, setPortfolioResult] = useState<PortfolioResult | null>(null);
   const [factorPortfolioResult, setFactorPortfolioResult] = useState<FactorPortfolioResult | null>(null);
-  const [activeWorkflow, setActiveWorkflow] = useState<"backtest" | "portfolio" | "factor">("backtest");
+  const [activeWorkflow, setActiveWorkflow] = useState<ActiveWorkflow>("empty");
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
+  const [streamEvents, setStreamEvents] = useState<ChatStreamEvent[]>([]);
   const [parsedRequest, setParsedRequest] = useState<
-    BacktestRequest | PortfolioOptimizationRequest | FactorPortfolioRequest | Record<string, unknown> | null
+    | BacktestRequest
+    | PortfolioOptimizationRequest
+    | FactorPortfolioRequest
+    | SingleStockResearchRequest
+    | MultiStockResearchRequest
+    | Record<string, unknown>
+    | null
   >(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
   const [usedChat, setUsedChat] = useState(false);
@@ -77,15 +86,6 @@ export default function App() {
   const [analyticsStatus, setAnalyticsStatus] = useState<AnalyticsStatus | null>(null);
   const [analyticsStatusError, setAnalyticsStatusError] = useState<string | null>(null);
   const [isAnalyticsStatusLoading, setIsAnalyticsStatusLoading] = useState(false);
-
-  const parseError = useMemo(() => {
-    try {
-      JSON.parse(parametersText || "{}");
-      return null;
-    } catch (error) {
-      return error instanceof Error ? error.message : "Parameters must be valid JSON.";
-    }
-  }, [parametersText]);
 
   const configSummary = useMemo(() => {
     const missing = [!apiKeys.chatApiKey.trim() ? "Chat key" : "", !apiKeys.finnhubApiKey.trim() ? "Finnhub" : ""].filter(Boolean);
@@ -109,11 +109,6 @@ export default function App() {
   }, [analyticsStatus, analyticsStatusError, isAnalyticsStatusLoading]);
 
   const shouldOpenConfig = !apiKeys.chatApiKey.trim() || !apiKeys.finnhubApiKey.trim();
-
-  function handleStrategyChange(nextStrategy: StrategyName) {
-    setStrategy(nextStrategy);
-    setParametersText(defaultParameters[nextStrategy]);
-  }
 
   const refreshMcpStatus = useCallback(async () => {
     setIsMcpStatusLoading(true);
@@ -141,53 +136,24 @@ export default function App() {
     }
   }, []);
 
+  const refreshStrategies = useCallback(async () => {
+    setIsStrategyLoading(true);
+    setStrategyError(null);
+    try {
+      const response = await fetchStrategyRegistry({ limit: 200 });
+      setStrategies(response.strategies || []);
+    } catch (error) {
+      setStrategyError(error instanceof Error ? error.message : "Strategy registry failed to load.");
+    } finally {
+      setIsStrategyLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
+    void refreshStrategies();
     void refreshMcpStatus();
     void refreshAnalyticsStatus();
-  }, [refreshAnalyticsStatus, refreshMcpStatus]);
-
-  async function handleSubmit() {
-    setActiveWorkflow("backtest");
-    if (parseError) {
-      setError("Fix the parameters JSON before running the backtest.");
-      return;
-    }
-
-    if (!apiKeys.finnhubApiKey.trim()) {
-      setError("Finnhub API key is required for market data.");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setChatError(null);
-
-    try {
-      const payload = buildBacktestPayload(
-        symbol,
-        strategy,
-        parametersText,
-        lookback,
-        monteCarloDays,
-        initialCash,
-        fees,
-      );
-      const response = await runBacktest(payload, apiKeys);
-      setResult(response);
-      setPortfolioResult(null);
-      setFactorPortfolioResult(null);
-      setParsedRequest(payload);
-      setDiagnostics(response.diagnostics || null);
-      setUsedChat(false);
-      setAssistantMessage(null);
-      void refreshMcpStatus();
-      void refreshAnalyticsStatus();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Backtest failed.");
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  }, [refreshAnalyticsStatus, refreshMcpStatus, refreshStrategies]);
 
   async function handleChatSubmit(message: string) {
     if (!apiKeys.chatApiKey.trim()) {
@@ -195,7 +161,6 @@ export default function App() {
       setError("Chat API key is required for natural language parsing.");
       return;
     }
-
     if (!apiKeys.finnhubApiKey.trim()) {
       setChatError("Finnhub API key is required for market data.");
       setError("Finnhub API key is required for market data.");
@@ -205,23 +170,30 @@ export default function App() {
     setIsLoading(true);
     setError(null);
     setChatError(null);
+    setStreamEvents([]);
 
     try {
-      const response = await runChat(message, apiKeys);
+      const response = await runChatStream(message, apiKeys, (event) => {
+        setStreamEvents((current) => [...current.slice(-40), event]);
+        if (event.event === "message.delta" && typeof event.data.content === "string") {
+          setAssistantMessage(event.data.content);
+        }
+      });
       setAssistantMessage(response.assistant_message || null);
       setParsedRequest(response.parsed_request || null);
       setDiagnostics(response.diagnostics || response.backtest_result?.diagnostics || null);
       setUsedChat(true);
+      setResearchEnvelope(null);
 
       if (response.status === "needs_input") {
         setChatError(null);
         setError(null);
         return;
       }
-
       if (response.result_type === "portfolio_optimization" && response.portfolio_result) {
         setPortfolioResult(response.portfolio_result);
         setFactorPortfolioResult(null);
+        setResult(null);
         setActiveWorkflow("portfolio");
       } else if (response.result_type === "factor_portfolio" && response.factor_portfolio_result) {
         setFactorPortfolioResult(response.factor_portfolio_result);
@@ -245,22 +217,78 @@ export default function App() {
     }
   }
 
+  async function handleSingleResearch(payload: SingleStockResearchRequest) {
+    if (!apiKeys.finnhubApiKey.trim()) {
+      setError("Finnhub API key is required for market data.");
+      return;
+    }
+    setActiveWorkflow("research");
+    setIsLoading(true);
+    setError(null);
+    setChatError(null);
+    try {
+      const response = await runSingleStockResearch(payload, apiKeys);
+      setResearchEnvelope(response);
+      setResult(null);
+      setPortfolioResult(null);
+      setFactorPortfolioResult(null);
+      setParsedRequest(payload);
+      setDiagnostics(response.diagnostics || null);
+      setUsedChat(false);
+      setAssistantMessage(null);
+      void refreshMcpStatus();
+      void refreshAnalyticsStatus();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Single-stock research failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleMultiResearch(payload: MultiStockResearchRequest) {
+    if (!apiKeys.finnhubApiKey.trim()) {
+      setError("Finnhub API key is required for market data.");
+      return;
+    }
+    setActiveWorkflow("research");
+    setIsLoading(true);
+    setError(null);
+    setChatError(null);
+    try {
+      const response = await runMultiStockResearch(payload, apiKeys);
+      setResearchEnvelope(response);
+      setResult(null);
+      setPortfolioResult(null);
+      setFactorPortfolioResult(null);
+      setParsedRequest(payload);
+      setDiagnostics(response.diagnostics || null);
+      setUsedChat(false);
+      setAssistantMessage(null);
+      void refreshMcpStatus();
+      void refreshAnalyticsStatus();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Multi-stock research failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function handlePortfolioSubmit(payload: PortfolioOptimizationRequest) {
     setActiveWorkflow("portfolio");
     setIsLoading(true);
     setError(null);
     setChatError(null);
-
     if (!apiKeys.finnhubApiKey.trim()) {
       setIsLoading(false);
       setError("Finnhub API key is required for market data.");
       return;
     }
-
     try {
       const response = await runPortfolioOptimization(payload, apiKeys);
       setPortfolioResult(response.portfolio_result || null);
+      setResearchEnvelope(null);
       setFactorPortfolioResult(null);
+      setResult(null);
       setParsedRequest(response.parsed_request || payload);
       setDiagnostics(response.diagnostics || null);
       setUsedChat(false);
@@ -279,16 +307,15 @@ export default function App() {
     setIsLoading(true);
     setError(null);
     setChatError(null);
-
     if (!apiKeys.finnhubApiKey.trim()) {
       setIsLoading(false);
       setError("Finnhub API key is required for market and factor data.");
       return;
     }
-
     try {
       const response = await runFactorPortfolio(payload, apiKeys);
       setFactorPortfolioResult(response.factor_portfolio_result || null);
+      setResearchEnvelope(null);
       setPortfolioResult(null);
       setResult(null);
       setParsedRequest(response.parsed_request || payload);
@@ -312,40 +339,28 @@ export default function App() {
             isLoading={isLoading}
             assistantMessage={assistantMessage}
             error={chatError}
+            streamEvents={streamEvents}
             onSend={handleChatSubmit}
           />
+
+          <ManualResearchLab
+            strategies={strategies}
+            isLoading={isLoading}
+            onRunSingle={handleSingleResearch}
+            onRunMulti={handleMultiResearch}
+          />
+
+          <StrategyDiscoveryLab isLoading={isLoading} />
 
           <CollapsiblePanel title="LLM / API Configuration" defaultOpen={shouldOpenConfig} summary={configSummary}>
             <ApiKeyPanel apiKeys={apiKeys} onChange={setApiKeys} />
           </CollapsiblePanel>
 
-          <CollapsiblePanel title="Manual Backtest" defaultOpen={false} summary={`${symbol.toUpperCase()} / ${lookback}`}>
-            <BacktestForm
-              symbol={symbol}
-              strategy={strategy}
-              parametersText={parametersText}
-              lookback={lookback}
-              monteCarloDays={monteCarloDays}
-              initialCash={initialCash}
-              fees={fees}
-              isLoading={isLoading}
-              parseError={parseError}
-              onSymbolChange={setSymbol}
-              onStrategyChange={handleStrategyChange}
-              onParametersTextChange={setParametersText}
-              onLookbackChange={setLookback}
-              onMonteCarloDaysChange={setMonteCarloDays}
-              onInitialCashChange={setInitialCash}
-              onFeesChange={setFees}
-              onSubmit={handleSubmit}
-            />
-          </CollapsiblePanel>
-
-          <CollapsiblePanel title="Portfolio Optimizer" defaultOpen={false} summary="All stocks and sectors">
+          <CollapsiblePanel title="Compatibility Optimizer" defaultOpen={false} summary="Raw Markowitz">
             <PortfolioOptimizerPanel isLoading={isLoading} onSubmit={handlePortfolioSubmit} />
           </CollapsiblePanel>
 
-          <CollapsiblePanel title="Factor Portfolio" defaultOpen={false} summary="Quality, value, momentum">
+          <CollapsiblePanel title="Compatibility Factor Portfolio" defaultOpen={false} summary="Score tilt">
             <FactorPortfolioPanel isLoading={isLoading} onSubmit={handleFactorPortfolioSubmit} />
           </CollapsiblePanel>
 
@@ -354,7 +369,7 @@ export default function App() {
               status={mcpStatus}
               isLoading={isMcpStatusLoading}
               error={mcpStatusError}
-              diagnostics={diagnostics || result?.diagnostics || null}
+              diagnostics={diagnostics || result?.diagnostics || researchEnvelope?.diagnostics || null}
               result={result}
               onRefresh={refreshMcpStatus}
             />
@@ -380,29 +395,126 @@ export default function App() {
         </Sidebar>
       }
     >
-      {activeWorkflow === "factor" ? (
-        <FactorPortfolioResultDashboard
-          result={factorPortfolioResult}
-          isLoading={isLoading}
-          error={error}
+      <div className="space-y-4">
+        <RegistryStrip
+          strategies={strategies}
+          isLoading={isStrategyLoading}
+          error={strategyError}
+          onRefresh={refreshStrategies}
         />
-      ) : activeWorkflow === "portfolio" ? (
-        <PortfolioResultDashboard
-          result={portfolioResult}
-          isLoading={isLoading}
-          error={error}
-          parsedRequest={parsedRequest}
-        />
-      ) : (
-        <ResultDashboard
-          result={result}
-          isLoading={isLoading}
-          error={error}
-          parsedRequest={parsedRequest}
-          diagnostics={diagnostics}
-          usedChat={usedChat}
-        />
-      )}
+        {activeWorkflow === "research" ? (
+          <ResearchWorkspace envelope={researchEnvelope} isLoading={isLoading} error={error} />
+        ) : activeWorkflow === "factor" ? (
+          <FactorPortfolioResultDashboard result={factorPortfolioResult} isLoading={isLoading} error={error} />
+        ) : activeWorkflow === "portfolio" ? (
+          <PortfolioResultDashboard
+            result={portfolioResult}
+            isLoading={isLoading}
+            error={error}
+            parsedRequest={parsedRequest}
+          />
+        ) : activeWorkflow === "backtest" ? (
+          <ResultDashboard
+            result={result}
+            isLoading={isLoading}
+            error={error}
+            parsedRequest={parsedRequest}
+            diagnostics={diagnostics}
+            usedChat={usedChat}
+          />
+        ) : (
+          <EmptyState
+            title="No research run loaded"
+            message="Use the AI chat, manual research lab, or discovery lab to start an MCP-backed workflow."
+          />
+        )}
+      </div>
     </AppShell>
+  );
+}
+
+function ResearchWorkspace({
+  envelope,
+  isLoading,
+  error,
+}: {
+  envelope: ResearchResultEnvelope | null;
+  isLoading: boolean;
+  error: string | null;
+}) {
+  if (isLoading) {
+    return <EmptyState title="Running MCP workflow" message="Fetching data, generating signals, optimizing, and building artifacts." />;
+  }
+  if (error && !envelope) {
+    return <EmptyState title="Research failed" message={error} />;
+  }
+  if (!envelope) {
+    return <EmptyState title="No MCP envelope" message="The workflow did not return a research envelope." />;
+  }
+  return (
+    <div className="space-y-4">
+      {error ? <div className="border border-red/60 bg-red/10 p-3 text-sm text-red">{error}</div> : null}
+      <A2UITemplateRenderer envelope={envelope} />
+    </div>
+  );
+}
+
+function RegistryStrip({
+  strategies,
+  isLoading,
+  error,
+  onRefresh,
+}: {
+  strategies: StrategyRegistryItem[];
+  isLoading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const runnable = strategies.filter((strategy) => strategy.runnable).length;
+  const singleAsset = strategies.filter((strategy) => strategy.execution_type === "single_asset_signal").length;
+  return (
+    <section className="panel-shell p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="section-title">Strategy Registry</h2>
+          <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs text-muted">
+            <span className="border border-line bg-ink px-2 py-1">{strategies.length} total</span>
+            <span className="border border-line bg-ink px-2 py-1">{runnable} runnable</span>
+            <span className="border border-line bg-ink px-2 py-1">{singleAsset} signal engines</span>
+          </div>
+        </div>
+        <button
+          className="border border-line bg-ink px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted hover:border-green hover:text-green"
+          type="button"
+          onClick={onRefresh}
+          disabled={isLoading}
+        >
+          {isLoading ? "Loading" : "Refresh"}
+        </button>
+      </div>
+      {error ? <div className="mt-3 border border-red/60 bg-red/10 p-3 text-xs text-red">{error}</div> : null}
+      <div className="mt-3 max-h-40 overflow-auto border border-line">
+        <table className="min-w-full border-collapse font-mono text-xs">
+          <thead className="bg-panel2 text-muted">
+            <tr>
+              <th className="border-b border-line px-3 py-2 text-left">ID</th>
+              <th className="border-b border-line px-3 py-2 text-left">Name</th>
+              <th className="border-b border-line px-3 py-2 text-left">Readiness</th>
+              <th className="border-b border-line px-3 py-2 text-left">Execution</th>
+            </tr>
+          </thead>
+          <tbody>
+            {strategies.slice(0, 40).map((strategy) => (
+              <tr key={strategy.strategy_id} className="odd:bg-ink even:bg-panel">
+                <td className="border-b border-line px-3 py-2 text-green">{strategy.strategy_id}</td>
+                <td className="border-b border-line px-3 py-2 text-text">{strategy.name}</td>
+                <td className="border-b border-line px-3 py-2 text-muted">{strategy.readiness}</td>
+                <td className="border-b border-line px-3 py-2 text-muted">{strategy.execution_type}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

@@ -8,11 +8,21 @@ from apps.backtesting.mcp_client import (
     MCPClientError,
     fetch_remote_sectors,
     fetch_remote_stocks_by_sector,
+    get_remote_research_run,
     get_mcp_status,
+    list_remote_research_runs,
+    run_remote_multi_stock_research,
+    run_remote_single_stock_research,
 )
 from apps.backtesting.engine import BacktestExecutionError, run_backtest, run_portfolio_optimization
 from apps.backtesting.engine import run_factor_portfolio
-from apps.backtesting.serializers import BacktestRequestSerializer, FactorPortfolioRequestSerializer, PortfolioOptimizationRequestSerializer
+from apps.backtesting.serializers import (
+    BacktestRequestSerializer,
+    FactorPortfolioRequestSerializer,
+    MultiStockResearchRequestSerializer,
+    PortfolioOptimizationRequestSerializer,
+    SingleStockResearchRequestSerializer,
+)
 from apps.market_data.finnhub import MarketDataError
 from apps.strategies.registry import StrategyValidationError
 
@@ -133,6 +143,81 @@ class FactorPortfolioAPIView(APIView):
             )
 
         return Response(result, status=status.HTTP_200_OK)
+
+
+class SingleStockResearchAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        serializer = SingleStockResearchRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Invalid single-stock research request.",
+                    "errors": _serializer_errors(serializer.errors),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        api_keys = api_keys_from_request(request)
+        try:
+            result = run_remote_single_stock_research(
+                serializer.validated_data,
+                finnhub_api_key=api_keys.finnhub_api_key,
+            )
+        except MCPClientError as exc:
+            return _error_response(str(exc), exc.code, status.HTTP_502_BAD_GATEWAY)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class MultiStockResearchAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        serializer = MultiStockResearchRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Invalid multi-stock research request.",
+                    "errors": _serializer_errors(serializer.errors),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        api_keys = api_keys_from_request(request)
+        try:
+            result = run_remote_multi_stock_research(
+                serializer.validated_data,
+                finnhub_api_key=api_keys.finnhub_api_key,
+            )
+        except MCPClientError as exc:
+            return _error_response(str(exc), exc.code, status.HTTP_502_BAD_GATEWAY)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class ResearchRunsAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit", 25))
+            return Response(list_remote_research_runs(limit=limit), status=status.HTTP_200_OK)
+        except MCPClientError as exc:
+            return _error_response(str(exc), exc.code, status.HTTP_502_BAD_GATEWAY)
+
+
+class ResearchRunDetailsAPIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, _request, run_id: str):
+        try:
+            return Response(get_remote_research_run(run_id), status=status.HTTP_200_OK)
+        except MCPClientError as exc:
+            return _error_response(str(exc), exc.code, status.HTTP_502_BAD_GATEWAY)
 
 
 class UniverseSectorsAPIView(APIView):

@@ -15,9 +15,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(56, 210, 210, 0.07), transparent 260px),
-    #070b10;
+  background: #070b10;
 }
 
 button,
@@ -45,7 +43,7 @@ textarea {
   }
 
   .form-control {
-    @apply w-full border border-line bg-ink px-3 py-2 text-sm text-text outline-none transition focus:border-cyan;
+    @apply w-full border border-line bg-ink px-3 py-2 text-sm text-text outline-none transition focus:border-green;
   }
 }
 

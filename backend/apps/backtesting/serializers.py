@@ -152,6 +152,53 @@ class FactorPortfolioRequestSerializer(serializers.Serializer):
         return attrs
 
 
+class SingleStockResearchRequestSerializer(serializers.Serializer):
+    symbol = serializers.CharField(max_length=64)
+    strategy_id = serializers.CharField(max_length=128)
+    parameters = serializers.DictField(required=False, default=dict)
+    lookback = serializers.ChoiceField(choices=["1mo", "6mo", "1y", "2y", "5y"], required=False, default="2y")
+    resolution = serializers.ChoiceField(choices=["D"], required=False, default="D")
+    initial_cash = serializers.FloatField(required=False, default=10000.0, min_value=1.0)
+    fees = serializers.FloatField(required=False, default=0.001, min_value=0.0)
+    monte_carlo = serializers.DictField(required=False, default=dict)
+
+    def validate_symbol(self, value: str) -> str:
+        value = value.strip().upper()
+        if not value:
+            raise serializers.ValidationError("symbol is required.")
+        return value
+
+
+class MultiStockResearchRequestSerializer(serializers.Serializer):
+    symbols = serializers.ListField(
+        child=serializers.CharField(max_length=32),
+        min_length=2,
+        max_length=30,
+    )
+    strategy_id = serializers.CharField(max_length=128)
+    parameters = serializers.DictField(required=False, default=dict)
+    lookback = serializers.ChoiceField(choices=["1mo", "6mo", "1y", "2y", "5y"], required=False, default="2y")
+    resolution = serializers.ChoiceField(choices=["D"], required=False, default="D")
+    initial_cash = serializers.FloatField(required=False, default=10000.0, min_value=1.0)
+    fees = serializers.FloatField(required=False, default=0.001, min_value=0.0)
+    optimization = serializers.DictField(required=False, default=dict)
+    monte_carlo = serializers.DictField(required=False, default=dict)
+
+    def validate_symbols(self, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw_symbol in value:
+            symbol = str(raw_symbol or "").strip().upper()
+            if ":" in symbol:
+                symbol = symbol.split(":")[-1]
+            if symbol and symbol not in seen:
+                normalized.append(symbol)
+                seen.add(symbol)
+        if len(normalized) < 2:
+            raise serializers.ValidationError("At least two unique symbols are required.")
+        return normalized
+
+
 def _normalize_portfolio_monte_carlo(value) -> dict:
     raw = value if isinstance(value, dict) else {}
     config = {

@@ -4,6 +4,7 @@ type ChatPanelProps = {
   isLoading: boolean;
   assistantMessage: string | null;
   error: string | null;
+  streamEvents?: Array<{ event: string; data: Record<string, unknown> }>;
   onSend: (message: string) => Promise<void>;
 };
 
@@ -30,15 +31,15 @@ const examples = [
   },
 ];
 
-export default function ChatPanel({ isLoading, assistantMessage, error, onSend }: ChatPanelProps) {
+export default function ChatPanel({ isLoading, assistantMessage, error, streamEvents = [], onSend }: ChatPanelProps) {
   const [message, setMessage] = useState(examples[0].prompt);
 
   return (
     <section className="panel-shell p-4">
       <div className="mb-3 flex items-center justify-between border-b border-line pb-3">
-        <h2 className="section-title">AI Parser Chat</h2>
+        <h2 className="section-title">AI Research Chat</h2>
         <span className="border border-line px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-muted">
-          One LLM Call
+          SSE
         </span>
       </div>
 
@@ -64,9 +65,20 @@ export default function ChatPanel({ isLoading, assistantMessage, error, onSend }
           type="submit"
           disabled={isLoading || !message.trim()}
         >
-          {isLoading ? "Parsing And Running" : "Run From Chat"}
+          {isLoading ? "Streaming Research" : "Run From Chat"}
         </button>
       </form>
+
+      {streamEvents.length ? (
+        <div className="mt-4 max-h-44 space-y-1 overflow-auto border border-line bg-ink p-3 font-mono text-[11px] leading-5">
+          {streamEvents.slice(-12).map((item, index) => (
+            <div key={`${item.event}-${index}`} className="grid grid-cols-[132px_minmax(0,1fr)] gap-2">
+              <span className="text-green">{item.event}</span>
+              <span className="truncate text-muted">{eventSummary(item.data)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-4 space-y-2">
         <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Examples</div>
@@ -90,9 +102,17 @@ export default function ChatPanel({ isLoading, assistantMessage, error, onSend }
       {error ? <div className="mt-4 border border-red/60 bg-red/10 p-3 text-sm leading-6 text-red">{error}</div> : null}
 
       <div className="mt-4 border border-dashed border-line bg-ink p-3 text-xs leading-5 text-muted">
-        The LLM only parses the message into JSON. Market data, trades, equity curves, and Monte Carlo paths stay inside
-        the deterministic backend.
+        The LLM routes and extracts parameters. MCP performs market data, signals, backtests, optimization, and Monte Carlo.
       </div>
     </section>
   );
+}
+
+function eventSummary(data: Record<string, unknown>): string {
+  if (typeof data.content === "string") return data.content;
+  if (typeof data.tool === "string") return data.tool;
+  if (typeof data.result_type === "string") return data.result_type;
+  if (typeof data.run_id === "string") return data.run_id;
+  if (typeof data.message === "string") return data.message;
+  return JSON.stringify(data);
 }

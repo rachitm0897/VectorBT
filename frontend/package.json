@@ -10,6 +10,8 @@
     "test:portfolio": "node --test scripts/test-portfolio-view-model.mjs"
   },
   "dependencies": {
+    "@a2ui/react": "^0.10.1",
+    "@a2ui/web_core": "^0.10.3",
     "@vitejs/plugin-react": "^5.0.0",
     "ag-grid-community": "^33.0.0",
     "ag-grid-react": "^33.0.0",
@@ -18,10 +20,11 @@
     "framer-motion": "^12.0.0",
     "lightweight-charts": "^5.0.0",
     "plotly.js-dist-min": "^2.35.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-plotly.js": "^2.6.0",
     "recharts": "^3.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-plotly.js": "^2.6.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

@@ -218,6 +218,239 @@ CREATE TABLE IF NOT EXISTS mcp_tool_calls (
     symbols_count INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS strategies (
+    id SERIAL PRIMARY KEY,
+    strategy_id VARCHAR(128) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    name TEXT NOT NULL,
+    aliases TEXT[] DEFAULT '{}',
+    description TEXT,
+    family VARCHAR(128),
+    category VARCHAR(128),
+    source_type VARCHAR(128),
+    horizon_bucket VARCHAR(64),
+    execution_type VARCHAR(64),
+    readiness VARCHAR(64),
+    implementation_version VARCHAR(128),
+    long_only BOOLEAN DEFAULT TRUE,
+    long_short BOOLEAN DEFAULT FALSE,
+    active BOOLEAN DEFAULT TRUE,
+    deprecated BOOLEAN DEFAULT FALSE,
+    source_hash VARCHAR(128),
+    template_hint VARCHAR(128),
+
+    parameter_schema JSONB,
+    default_parameters JSONB,
+    required_data TEXT[] DEFAULT '{}',
+    required_features TEXT[] DEFAULT '{}',
+    signal_rules JSONB,
+    ranking_rules JSONB,
+    classification_metrics JSONB,
+    scores_json JSONB,
+    source_payload JSONB
+);
+
+CREATE TABLE IF NOT EXISTS strategy_versions (
+    id SERIAL PRIMARY KEY,
+    strategy_id VARCHAR(128) NOT NULL,
+    implementation_version VARCHAR(128) NOT NULL,
+    source_hash VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    definition_json JSONB,
+    UNIQUE(strategy_id, implementation_version, source_hash)
+);
+
+CREATE TABLE IF NOT EXISTS strategy_parameters (
+    id SERIAL PRIMARY KEY,
+    strategy_id VARCHAR(128) NOT NULL,
+    parameter_name VARCHAR(128) NOT NULL,
+    parameter_schema JSONB,
+    default_value JSONB
+);
+
+CREATE TABLE IF NOT EXISTS strategy_sources (
+    id SERIAL PRIMARY KEY,
+    strategy_id VARCHAR(128) NOT NULL,
+    source_type VARCHAR(128),
+    name TEXT,
+    url TEXT,
+    path TEXT,
+    citation TEXT
+);
+
+CREATE TABLE IF NOT EXISTS strategy_import_runs (
+    id SERIAL PRIMARY KEY,
+    import_id VARCHAR(128) UNIQUE NOT NULL,
+    started_at TIMESTAMP DEFAULT NOW(),
+    completed_at TIMESTAMP,
+    source_root TEXT,
+    status VARCHAR(32),
+    imported_count INTEGER,
+    skipped_count INTEGER,
+    changed_count INTEGER,
+    summary_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS strategy_import_errors (
+    id SERIAL PRIMARY KEY,
+    import_id VARCHAR(128),
+    strategy_id VARCHAR(128),
+    path TEXT,
+    error_message TEXT,
+    payload_json JSONB,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS strategy_candidates (
+    id SERIAL PRIMARY KEY,
+    candidate_id VARCHAR(128) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    status VARCHAR(64),
+    name TEXT,
+    payload_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS candidate_reviews (
+    id SERIAL PRIMARY KEY,
+    candidate_id VARCHAR(128) NOT NULL,
+    reviewed_at TIMESTAMP DEFAULT NOW(),
+    reviewer TEXT,
+    action VARCHAR(64),
+    reviewer_note TEXT,
+    edits_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS research_runs (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(128) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    user_id VARCHAR(128),
+    workflow_type VARCHAR(128),
+    status VARCHAR(32),
+    strategy_id VARCHAR(128),
+    strategy_version VARCHAR(128),
+    symbols TEXT[] DEFAULT '{}',
+    parameters JSONB,
+    data_start TIMESTAMP,
+    data_end TIMESTAMP,
+    engine_version VARCHAR(128),
+    metrics_json JSONB,
+    summary_json JSONB,
+    warnings TEXT[] DEFAULT '{}',
+    errors TEXT[] DEFAULT '{}',
+    artifacts_json JSONB,
+    result_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS research_run_symbols (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(128) NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    UNIQUE(run_id, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS backtest_metrics (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(128) NOT NULL,
+    metric_name VARCHAR(128),
+    metric_value NUMERIC,
+    metric_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS trades (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(128) NOT NULL,
+    symbol VARCHAR(32),
+    payload_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS drawdown_points (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(128) NOT NULL,
+    time TIMESTAMP,
+    drawdown_pct NUMERIC
+);
+
+CREATE TABLE IF NOT EXISTS efficient_frontier_points (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(128) NOT NULL,
+    portfolio_volatility NUMERIC,
+    portfolio_return NUMERIC,
+    sharpe_ratio NUMERIC,
+    weights_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS monte_carlo_runs (
+    id SERIAL PRIMARY KEY,
+    mc_run_id VARCHAR(128) UNIQUE NOT NULL,
+    run_id VARCHAR(128),
+    created_at TIMESTAMP DEFAULT NOW(),
+    method VARCHAR(64),
+    mode VARCHAR(64),
+    seed INTEGER,
+    simulation_count INTEGER,
+    horizon INTEGER,
+    summary_json JSONB,
+    terminal_distribution_json JSONB,
+    drawdown_distribution_json JSONB,
+    threshold_probabilities_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS monte_carlo_percentile_points (
+    id SERIAL PRIMARY KEY,
+    mc_run_id VARCHAR(128) NOT NULL,
+    percentile VARCHAR(16),
+    step_index INTEGER,
+    value NUMERIC
+);
+
+CREATE TABLE IF NOT EXISTS monte_carlo_terminal_bins (
+    id SERIAL PRIMARY KEY,
+    mc_run_id VARCHAR(128) NOT NULL,
+    lower_value NUMERIC,
+    upper_value NUMERIC,
+    count INTEGER,
+    probability_pct NUMERIC
+);
+
+CREATE TABLE IF NOT EXISTS chat_threads (
+    id SERIAL PRIMARY KEY,
+    thread_id VARCHAR(128) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    user_id VARCHAR(128),
+    title TEXT,
+    metadata_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id SERIAL PRIMARY KEY,
+    message_id VARCHAR(128) UNIQUE NOT NULL,
+    thread_id VARCHAR(128),
+    created_at TIMESTAMP DEFAULT NOW(),
+    role VARCHAR(32),
+    content TEXT,
+    research_run_id VARCHAR(128),
+    metadata_json JSONB
+);
+
+CREATE TABLE IF NOT EXISTS ui_artifacts (
+    id SERIAL PRIMARY KEY,
+    artifact_id VARCHAR(128) UNIQUE NOT NULL,
+    run_id VARCHAR(128),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    artifact_type VARCHAR(64),
+    artifact_path TEXT,
+    artifact_url TEXT,
+    summary_json JSONB,
+    payload_json JSONB
+);
+
 CREATE INDEX IF NOT EXISTS idx_backtest_runs_created_at ON backtest_runs(created_at);
 CREATE INDEX IF NOT EXISTS idx_backtest_runs_run_id ON backtest_runs(run_id);
 CREATE INDEX IF NOT EXISTS idx_backtest_runs_symbol ON backtest_runs(symbol);
@@ -250,6 +483,19 @@ CREATE INDEX IF NOT EXISTS idx_mcp_tool_calls_status ON mcp_tool_calls(status);
 CREATE INDEX IF NOT EXISTS idx_mcp_tool_calls_symbol ON mcp_tool_calls(symbol);
 CREATE INDEX IF NOT EXISTS idx_mcp_tool_calls_strategy ON mcp_tool_calls(strategy);
 CREATE INDEX IF NOT EXISTS idx_mcp_tool_calls_sector ON mcp_tool_calls(sector);
+CREATE INDEX IF NOT EXISTS idx_strategies_strategy_id ON strategies(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_strategies_family ON strategies(family);
+CREATE INDEX IF NOT EXISTS idx_strategies_readiness ON strategies(readiness);
+CREATE INDEX IF NOT EXISTS idx_strategies_execution_type ON strategies(execution_type);
+CREATE INDEX IF NOT EXISTS idx_strategy_versions_strategy_id ON strategy_versions(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_candidates_status ON strategy_candidates(status);
+CREATE INDEX IF NOT EXISTS idx_research_runs_created_at ON research_runs(created_at);
+CREATE INDEX IF NOT EXISTS idx_research_runs_run_id ON research_runs(run_id);
+CREATE INDEX IF NOT EXISTS idx_research_runs_strategy_id ON research_runs(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_research_run_symbols_run_id ON research_run_symbols(run_id);
+CREATE INDEX IF NOT EXISTS idx_monte_carlo_runs_run_id ON monte_carlo_runs(run_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_id ON chat_messages(thread_id);
+CREATE INDEX IF NOT EXISTS idx_ui_artifacts_run_id ON ui_artifacts(run_id);
 
 GRANT CONNECT ON DATABASE analytics TO metabase_reader;
 GRANT USAGE ON SCHEMA public TO metabase_reader;

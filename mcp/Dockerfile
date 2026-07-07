@@ -21,7 +21,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
+COPY adapters ./adapters
+COPY app ./app
+COPY repositories ./repositories
+COPY schemas ./schemas
+COPY services ./services
 COPY tools ./tools
+COPY workflows ./workflows
 COPY server.py ./
 COPY us_stocks_only_universe.json ./
 

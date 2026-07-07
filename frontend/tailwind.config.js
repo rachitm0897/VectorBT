@@ -10,7 +10,7 @@ export default {
         line: "#243244",
         muted: "#91a0b6",
         text: "#e8eef7",
-        cyan: "#38d2d2",
+        cyan: "#7f8d9e",
         green: "#2dd47f",
         red: "#ff5c7a",
         amber: "#f6b44b",

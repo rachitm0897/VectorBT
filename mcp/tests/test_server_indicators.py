@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 import server
+import tools.legacy as legacy_tools
 
 
 def synthetic_market_data(periods: int = 90):
@@ -44,11 +45,7 @@ def test_list_indicators_and_get_indicator_info():
 
 def test_compute_indicator_serializes_outputs(monkeypatch):
     df, metadata = synthetic_market_data()
-    monkeypatch.setattr(
-        server,
-        "fetch_finnhub_candles_with_metadata",
-        lambda *args, **kwargs: (df, metadata),
-    )
+    monkeypatch.setattr(legacy_tools, "fetch_finnhub_candles_with_metadata", lambda *args, **kwargs: (df, metadata))
 
     response = server.compute_indicator(
         "AAPL",
@@ -73,7 +70,7 @@ def test_compute_indicators_batch_fetches_once_and_reports_partial_failures(monk
         calls += 1
         return df, metadata
 
-    monkeypatch.setattr(server, "fetch_finnhub_candles_with_metadata", fake_fetch)
+    monkeypatch.setattr(legacy_tools, "fetch_finnhub_candles_with_metadata", fake_fetch)
 
     response = server.compute_indicators_batch(
         "AAPL",

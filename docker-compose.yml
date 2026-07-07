@@ -68,12 +68,20 @@ services:
       MCP_BASE_PATH: /mcp
       MCP_PUBLIC_BASE_URL: http://localhost:8001
       MCP_CACHE_DIR: /app/cache
+      STOCK_STRATEGY_PROFILING_ROOT: /stock_strategy_profilling
+      ANALYTICS_ENABLED: "true"
+      ANALYTICS_DB_NAME: ${POSTGRES_ANALYTICS_DB:-analytics}
+      ANALYTICS_DB_USER: ${POSTGRES_ANALYTICS_WRITER_USER:-analytics_writer}
+      ANALYTICS_DB_PASSWORD: ${POSTGRES_ANALYTICS_WRITER_PASSWORD:-analytics_writer_password}
+      ANALYTICS_DB_HOST: analytics_db
+      ANALYTICS_DB_PORT: 5432
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-finance-mcp-dev}
       FINNHUB_API_KEY: ""
     volumes:
       - mcp_cache:/app/cache
+      - ../stock_strategy_profilling:/stock_strategy_profilling:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5).read()"]
       interval: 10s
@@ -105,6 +113,7 @@ services:
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://mcp:8001/mcp}
       MCP_CALL_TIMEOUT_SECONDS: 120
       MCP_DEFAULT_TOOL: run_strategy_research
+      MCP_ALLOWED_TOOLS: search_strategy_registry,get_strategy_details,run_single_stock_research,run_multi_stock_research,compare_strategies,discover_strategy_candidates,review_strategy_candidate,process_approved_strategy,get_research_run,list_research_runs,get_artifact_summary,sync_strategy_registry,run_strategy_research,run_markowitz_optimization,construct_factor_portfolio,list_strategies,get_strategy_schema,list_indicators,get_indicator_info,list_stock_universe,list_sectors,list_stocks_by_sector,resolve_symbols_for_sector
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-finance-mcp-dev}

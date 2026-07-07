@@ -8,12 +8,12 @@ type AppShellProps = {
 export default function AppShell({ sidebar, children }: AppShellProps) {
   return (
     <main className="min-h-screen bg-ink text-text">
-      <header className="sticky top-0 z-30 border-b border-line bg-ink/95 px-4 py-3 backdrop-blur lg:px-5">
+      <header className="sticky top-0 z-30 border-b border-line bg-ink px-4 py-3 lg:px-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold tracking-normal text-text">VectorBT Strategy Lab</h1>
+            <h1 className="text-xl font-semibold tracking-normal text-text">VectorBT Research Platform</h1>
             <p className="mt-0.5 text-xs uppercase tracking-[0.16em] text-muted">
-              Deterministic research terminal / Finnhub daily candles
+              MCP-first quantitative research terminal
             </p>
           </div>
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted">

@@ -2,11 +2,7 @@ export const DEFAULT_CHAT_URL = normalizeDefault("VITE_DEFAULT_CHAT_URL", "https
 export const DEFAULT_CHAT_MODEL = normalizeDefault("VITE_DEFAULT_MODEL", "gpt-4o-mini");
 export const METABASE_URL = normalizeUrl(import.meta.env.VITE_METABASE_URL, "http://localhost:3000");
 
-export type StrategyName =
-  | "sma_crossover"
-  | "rsi_mean_reversion"
-  | "bollinger_reversion"
-  | "macd_crossover";
+export type StrategyName = string;
 
 export type LlmConfig = {
   chatUrl: string;
@@ -30,6 +26,138 @@ export type BacktestRequest = {
     days: number;
     simulations: number;
     method: "bootstrap";
+  };
+};
+
+export type StrategyRegistryItem = {
+  strategy_id: string;
+  name: string;
+  aliases?: string[];
+  family?: string;
+  description?: string;
+  horizon_bucket?: string | null;
+  execution_type?: "single_asset_signal" | "cross_sectional_ranking" | "portfolio_strategy" | "research_only" | string;
+  readiness?: "BACKTEST_READY" | "MISSING_DATA" | "RULES_INCOMPLETE" | "BACKTEST_FAILED" | "RESEARCH_ONLY" | "DEPRECATED" | string;
+  runnable?: boolean;
+  long_only?: boolean;
+  long_short?: boolean;
+  template_hint?: string;
+  final_score?: number | null;
+};
+
+export type StrategyDetails = StrategyRegistryItem & {
+  source_type?: string;
+  source_references?: Array<Record<string, unknown>>;
+  required_data?: string[];
+  required_features?: string[];
+  parameter_schema?: Record<string, unknown>;
+  default_parameters?: Record<string, unknown>;
+  signal_rules?: Record<string, unknown>;
+  ranking_rules?: Record<string, unknown>;
+  implementation_version?: string;
+  classification_metrics?: Record<string, unknown>;
+  risk_score?: number | null;
+  return_score?: number | null;
+  risk_adjusted_score?: number | null;
+  robustness_score?: number | null;
+  active?: boolean;
+  deprecated?: boolean;
+  source_hash?: string | null;
+};
+
+export type StrategyRegistryResponse = {
+  status: "success" | "error";
+  count?: number;
+  strategies?: StrategyRegistryItem[];
+  message?: string;
+  errors?: string[];
+};
+
+export type StrategyDetailsResponse = {
+  status: "success" | "error";
+  strategy?: StrategyDetails;
+  message?: string;
+  errors?: string[];
+};
+
+export type UITemplateSpec = {
+  template_id: string;
+  title?: string | null;
+  props?: Record<string, unknown>;
+  artifacts?: Array<Record<string, unknown>>;
+  warnings?: string[];
+};
+
+export type ResearchResultEnvelope = {
+  status: "success" | "error" | string;
+  workflow_type?: string;
+  run_id?: string | null;
+  strategy?: StrategyDetails | Record<string, unknown> | null;
+  strategy_version?: string | null;
+  universe?: Record<string, unknown>;
+  parameters?: Record<string, unknown>;
+  data_quality?: Record<string, unknown>;
+  summary?: Record<string, unknown>;
+  metrics?: Record<string, unknown>;
+  allocations?: Record<string, unknown>;
+  trades?: Array<Record<string, unknown>>;
+  equity?: Array<Record<string, unknown>>;
+  drawdown?: Array<Record<string, unknown>>;
+  monte_carlo?: Record<string, unknown> | null;
+  frontier?: Array<Record<string, unknown>>;
+  comparison?: Record<string, unknown>;
+  warnings?: string[];
+  errors?: string[];
+  artifacts?: Array<Record<string, unknown>>;
+  ui_hint?: string | null;
+  ui_spec?: UITemplateSpec | Record<string, unknown> | null;
+  persistence?: Record<string, unknown>;
+  diagnostics?: Record<string, unknown>;
+  message?: string;
+};
+
+export type StrategyCandidate = Record<string, unknown>;
+
+export type StrategyDiscoveryResponse = {
+  status: "success" | "error";
+  candidates?: StrategyCandidate[];
+  count?: number;
+  message?: string;
+  errors?: string[];
+};
+
+export type SingleStockResearchRequest = {
+  symbol: string;
+  strategy_id: string;
+  parameters: Record<string, unknown>;
+  lookback: "1mo" | "6mo" | "1y" | "2y" | "5y";
+  resolution: "D";
+  initial_cash: number;
+  fees: number;
+  monte_carlo?: {
+    enabled?: boolean;
+    horizon_days?: number;
+    simulations?: number;
+    seed?: number | null;
+    mode?: "strategy_returns";
+  };
+};
+
+export type MultiStockResearchRequest = {
+  symbols: string[];
+  strategy_id: string;
+  parameters: Record<string, unknown>;
+  lookback: "1mo" | "6mo" | "1y" | "2y" | "5y";
+  resolution: "D";
+  initial_cash: number;
+  fees: number;
+  optimization?: Record<string, unknown>;
+  monte_carlo?: {
+    enabled?: boolean;
+    horizon_days?: number;
+    simulations?: number;
+    seed?: number | null;
+    mode?: "portfolio_returns";
   };
 };
 
@@ -402,6 +530,11 @@ export type ChatResponse = {
   missing_fields?: string[];
 };
 
+export type ChatStreamEvent = {
+  event: string;
+  data: Record<string, unknown>;
+};
+
 export type MCPStatus = {
   enabled: boolean;
   transport: string;
@@ -547,6 +680,159 @@ export async function runBacktest(payload: BacktestRequest, apiKeys?: ApiKeys): 
   return data;
 }
 
+export async function fetchStrategyRegistry(options: {
+  query?: string;
+  family?: string;
+  readiness?: string;
+  execution_type?: string;
+  executable_only?: boolean;
+  limit?: number;
+} = {}): Promise<StrategyRegistryResponse> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(buildApiUrl(`/strategies/${suffix}`), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const data = (await response.json()) as StrategyRegistryResponse;
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Strategy registry request failed."}${details}`);
+  }
+  return data;
+}
+
+export async function fetchStrategyDetails(strategyId: string): Promise<StrategyDetailsResponse> {
+  const response = await fetch(buildApiUrl(`/strategies/${encodeURIComponent(strategyId)}/`), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const data = (await response.json()) as StrategyDetailsResponse;
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Strategy details request failed."}${details}`);
+  }
+  return data;
+}
+
+export async function runSingleStockResearch(
+  payload: SingleStockResearchRequest,
+  apiKeys?: ApiKeys,
+): Promise<ResearchResultEnvelope> {
+  const response = await fetch(buildApiUrl("/research/single/"), {
+    method: "POST",
+    headers: buildFinnhubRequestHeaders(apiKeys),
+    body: JSON.stringify({ ...payload, ...buildConfigPayload(apiKeys, false) }),
+  });
+
+  let data: ResearchResultEnvelope | null = null;
+  try {
+    data = (await response.json()) as ResearchResultEnvelope;
+  } catch {
+    data = null;
+  }
+
+  if (!data) {
+    throw new Error("Backend returned an empty single-stock research response.");
+  }
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Single-stock research failed."}${details}`);
+  }
+  return data;
+}
+
+export async function runMultiStockResearch(
+  payload: MultiStockResearchRequest,
+  apiKeys?: ApiKeys,
+): Promise<ResearchResultEnvelope> {
+  const response = await fetch(buildApiUrl("/research/multi/"), {
+    method: "POST",
+    headers: buildFinnhubRequestHeaders(apiKeys),
+    body: JSON.stringify({ ...payload, ...buildConfigPayload(apiKeys, false) }),
+  });
+
+  let data: ResearchResultEnvelope | null = null;
+  try {
+    data = (await response.json()) as ResearchResultEnvelope;
+  } catch {
+    data = null;
+  }
+
+  if (!data) {
+    throw new Error("Backend returned an empty multi-stock research response.");
+  }
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Multi-stock research failed."}${details}`);
+  }
+  return data;
+}
+
+export async function discoverStrategyCandidates(payload: {
+  query: string;
+  sources: string[];
+  max_results_per_source: number;
+  max_candidates: number;
+  start_year?: number | null;
+  end_year?: number | null;
+}): Promise<StrategyDiscoveryResponse> {
+  const response = await fetch(buildApiUrl("/discovery/candidates/"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await response.json()) as StrategyDiscoveryResponse;
+  if (!response.ok || data.status === "error") {
+    const details = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${data.message || "Strategy discovery failed."}${details}`);
+  }
+  return data;
+}
+
+export async function reviewStrategyCandidate(
+  candidateId: string,
+  payload: {
+    action: "approve" | "reject" | "mark_duplicate" | "request_changes";
+    reviewer?: string;
+    reviewer_note?: string;
+    edits?: Record<string, unknown>;
+  },
+): Promise<Record<string, unknown>> {
+  const response = await fetch(buildApiUrl(`/discovery/candidates/${encodeURIComponent(candidateId)}/review/`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await response.json()) as Record<string, unknown>;
+  if (!response.ok || data.status === "error") {
+    const errors = Array.isArray(data.errors) ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${String(data.message || "Candidate review failed.")}${errors}`);
+  }
+  return data;
+}
+
+export async function processApprovedStrategy(candidateId: string): Promise<Record<string, unknown>> {
+  const response = await fetch(buildApiUrl(`/discovery/candidates/${encodeURIComponent(candidateId)}/process/`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ limit: 1 }),
+  });
+  const data = (await response.json()) as Record<string, unknown>;
+  if (!response.ok || data.status === "error") {
+    const errors = Array.isArray(data.errors) ? ` (${data.errors.join(", ")})` : "";
+    throw new Error(`${String(data.message || "Approved strategy processing failed.")}${errors}`);
+  }
+  return data;
+}
+
 export async function fetchSectors(): Promise<string[]> {
   const response = await fetch(buildApiUrl("/universe/sectors/"), {
     method: "GET",
@@ -665,6 +951,63 @@ export async function runChat(message: string, apiKeys?: ApiKeys): Promise<ChatR
   return data;
 }
 
+export async function runChatStream(
+  message: string,
+  apiKeys: ApiKeys | undefined,
+  onEvent: (event: ChatStreamEvent) => void,
+): Promise<ChatResponse> {
+  const response = await fetch(buildApiUrl("/chat/stream/"), {
+    method: "POST",
+    headers: buildRequestHeaders(apiKeys),
+    body: JSON.stringify({ message, ...buildConfigPayload(apiKeys, true) }),
+  });
+
+  if (!response.body) {
+    return runChat(message, apiKeys);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let completed: ChatResponse | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split(/\n\n/);
+    buffer = events.pop() || "";
+    for (const rawEvent of events) {
+      const parsed = parseSseEvent(rawEvent);
+      if (!parsed) continue;
+      onEvent(parsed);
+      if (parsed.event === "message.completed") {
+        completed = parsed.data as ChatResponse;
+      }
+      if (parsed.event === "error") {
+        const message = String(parsed.data.message || "Chat stream failed.");
+        const errors = Array.isArray(parsed.data.errors) ? ` (${parsed.data.errors.join(", ")})` : "";
+        throw new Error(`${message}${errors}`);
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    const parsed = parseSseEvent(buffer);
+    if (parsed) {
+      onEvent(parsed);
+      if (parsed.event === "message.completed") {
+        completed = parsed.data as ChatResponse;
+      }
+    }
+  }
+
+  if (!response.ok && !completed) {
+    throw new Error("Chat stream failed.");
+  }
+  return completed || runChat(message, apiKeys);
+}
+
 export async function getMcpStatus(): Promise<MCPStatus> {
   const response = await fetch(buildBackendPathUrl(MCP_STATUS_PATH), {
     method: "GET",
@@ -676,6 +1019,24 @@ export async function getMcpStatus(): Promise<MCPStatus> {
     throw new Error(data?.error || "MCP status request failed.");
   }
   return data;
+}
+
+function parseSseEvent(rawEvent: string): ChatStreamEvent | null {
+  const lines = rawEvent.split(/\r?\n/);
+  const eventLine = lines.find((line) => line.startsWith("event:"));
+  const dataLines = lines.filter((line) => line.startsWith("data:"));
+  if (!eventLine || dataLines.length === 0) {
+    return null;
+  }
+
+  const event = eventLine.replace(/^event:\s*/, "").trim();
+  const dataText = dataLines.map((line) => line.replace(/^data:\s*/, "")).join("\n");
+  try {
+    const data = JSON.parse(dataText) as Record<string, unknown>;
+    return { event, data };
+  } catch {
+    return { event, data: { content: dataText } };
+  }
 }
 
 export async function getAnalyticsStatus(): Promise<AnalyticsStatus> {

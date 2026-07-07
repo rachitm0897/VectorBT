@@ -172,6 +172,90 @@ def fetch_remote_stocks_by_sector(sector: str | None = None) -> dict[str, Any]:
     }
 
 
+def search_remote_strategy_registry(
+    query: str | None = None,
+    family: str | None = None,
+    readiness: str | None = None,
+    execution_type: str | None = None,
+    executable_only: bool = False,
+    limit: int = 100,
+) -> dict[str, Any]:
+    arguments = {
+        "query": query,
+        "family": family,
+        "readiness": readiness,
+        "execution_type": execution_type,
+        "executable_only": executable_only,
+        "limit": limit,
+    }
+    compact = call_mcp_tool(
+        "search_strategy_registry",
+        {key: value for key, value in arguments.items() if value is not None},
+    )
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def get_remote_strategy_details(strategy_id: str) -> dict[str, Any]:
+    compact = call_mcp_tool("get_strategy_details", {"strategy_id": strategy_id})
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def discover_remote_strategy_candidates(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = call_mcp_tool("discover_strategy_candidates", payload)
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def review_remote_strategy_candidate(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = call_mcp_tool("review_strategy_candidate", payload)
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def process_remote_approved_strategy(candidate_id: str, limit: int = 1) -> dict[str, Any]:
+    compact = call_mcp_tool("process_approved_strategy", {"candidate_id": candidate_id, "limit": limit})
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def run_remote_single_stock_research(
+    validated_request: dict[str, Any],
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    arguments = dict(validated_request)
+    if finnhub_api_key:
+        arguments["finnhub_api_key"] = finnhub_api_key
+    compact = call_mcp_tool("run_single_stock_research", arguments)
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def run_remote_multi_stock_research(
+    validated_request: dict[str, Any],
+    finnhub_api_key: str | None = None,
+) -> dict[str, Any]:
+    arguments = dict(validated_request)
+    if finnhub_api_key:
+        arguments["finnhub_api_key"] = finnhub_api_key
+    compact = call_mcp_tool("run_multi_stock_research", arguments)
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def list_remote_research_runs(limit: int = 25) -> dict[str, Any]:
+    compact = call_mcp_tool("list_research_runs", {"limit": limit})
+    _raise_for_tool_error(compact)
+    return compact
+
+
+def get_remote_research_run(run_id: str) -> dict[str, Any]:
+    compact = call_mcp_tool("get_research_run", {"run_id": run_id})
+    _raise_for_tool_error(compact)
+    return compact
+
+
 def discover_remote_research_name(name: str) -> dict[str, Any]:
     normalized = str(name or "").strip().upper()
     strategies_response = call_mcp_tool("list_strategies", {})
@@ -716,6 +800,14 @@ def _mcp_tool_event(
 
 
 def _request_type_for_tool(tool_name: str) -> str | None:
+    if tool_name == "run_single_stock_research":
+        return "single_stock_research"
+    if tool_name == "run_multi_stock_research":
+        return "multi_stock_research"
+    if tool_name in {"discover_strategy_candidates", "review_strategy_candidate", "process_approved_strategy"}:
+        return "strategy_discovery"
+    if tool_name in {"search_strategy_registry", "get_strategy_details"}:
+        return "strategy_registry"
     if tool_name == "construct_factor_portfolio":
         return "factor_portfolio"
     if tool_name == "run_markowitz_optimization":
